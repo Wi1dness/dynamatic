@@ -635,6 +635,33 @@ def BlockerOp : Handshake_Op<"blocker", [
   let assemblyFormat = "$data attr-dict `:` type($result)";
 }
 
+def CoverPointOp : Handshake_Op<"coverpoint", [
+  Pure,
+  SameOperandsAndResultType
+]> {
+  let summary = "Transparent ready/valid coverage monitor";
+  let description = [{
+    Forward its input token to the output while allowing the backend to
+    observe ready/valid activity on the channel for coverage purposes.
+
+    Example:
+
+    ```mlir
+    %1 = coverpoint %0 : !handshake.channel<i32>
+    ```
+  }];
+
+  let arguments = (ins ChannelType:$input);
+  let results = (outs ChannelType:$result);
+
+  let assemblyFormat = "$input attr-dict `:` type($result)";
+
+  let extraClassDeclaration = [{
+    static constexpr ::llvm::StringLiteral COV_ID_ATTR_NAME =
+        "coverpoint_id";
+  }];
+}
+
 def NotOp : Handshake_Op<"not", [Pure, SameOperandsAndResultType]> {
   let summary = "Logical negation";
   let description = [{

@@ -176,6 +176,19 @@ def HandshakeMaterialize : DynamaticPass<"handshake-materialize"> {
   let constructor = "dynamatic::createHandshakeMaterialize()";
 }
 
+def HandshakeInsertCoverPoint : DynamaticPass<"handshake-insert-coverpoint"> {
+  let summary = "Insert transparent ready/valid coverpoint operators.";
+  let description = [{
+    Walks Handshake functions after materialization and inserts
+    `handshake.coverpoint` operations in front of data-path users to monitor the
+    ready/valid activity on each channel. The coverpoint operators are
+    transparent and forward their input token to the output unmodified. The
+    pass skips structural control operations such as forks, control
+    merges and conditional branches.
+  }];
+  let constructor = "dynamatic::createHandshakeInsertCoverPoint()";
+}
+
 def HandshakeOptimizeBitwidths : DynamaticPass< "handshake-optimize-bitwidths", 
                                                 ["mlir::arith::ArithDialect"]> {
   let summary = "Optimize bitwidths of all channels.";

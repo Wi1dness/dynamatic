@@ -7,12 +7,12 @@
 //===----------------------------------------------------------------------===//
 //
 // This file implements the export-dot tool, which outputs on stdout the
-// Graphviz-formatted representation on an input Handshake-level IR. The tool
-// may be configured so that its output is compatible with .dot files expected
-// by legacy Dynamatic, assuming the the inpur IR respects some constraints
-// imposed in legacy dataflow circuits. This tools enables the creation of a
-// bridge between Dynamatic and legacy Dynamatic, which is very useful in
-// practice.
+// Graphviz-formatted representation of either Handshake-level IR or
+// control-flow (func/cf) IR. The tool may be configured so that its output is
+// compatible with .dot files expected by legacy Dynamatic, assuming the input
+// IR respects the constraints imposed in legacy dataflow circuits. This tool
+// enables the creation of a bridge between Dynamatic and legacy Dynamatic,
+// which is very useful in practice.
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,13 +22,20 @@
 #include "dynamatic/Support/CFG.h"
 #include "dynamatic/Support/DOT.h"
 #include "dynamatic/Support/Utils/Utils.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
+#include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/SourceMgr.h"
@@ -77,6 +84,17 @@ static cl::opt<LabelType>
                          clEnumValN(LabelType::UNAME, "uname",
                                     "unique name of the operation")),
               cl::init(LabelType::TYPE), cl::cat(mainCategory));
+
+enum class IRKind { Handshake, CF };
+
+static cl::opt<IRKind> irKind(
+    "ir-kind", cl::Optional,
+    cl::desc("Kind of input IR to export"),
+    cl::values(clEnumValN(IRKind::Handshake, "handshake",
+                          "visualize Handshake-level IR (default)"),
+               clEnumValN(IRKind::CF, "cf",
+                          "visualize control-flow (func/cf) IR")),
+    cl::init(IRKind::Handshake), cl::cat(mainCategory));
 
 static constexpr StringLiteral DOTTED("dotted"), SOLID("solid"), DOT("dot"),
     NORMAL("normal");
@@ -258,6 +276,7 @@ static StringRef getNodeColor(Operation *op) {
       .Case<handshake::SourceOp, handshake::SinkOp>(
           [&](auto) { return "gainsboro"; })
       .Case<handshake::ConstantOp>([&](auto) { return "plum"; })
+      .Case<handshake::CoverPointOp>([&](auto) { return "deeppink"; })
       .Case<handshake::MemoryOpInterface, handshake::LoadOp,
             handshake::StoreOp>([&](auto) { return "coral"; })
       .Case<handshake::MergeOp, handshake::ControlMergeOp, handshake::MuxOp>(
@@ -445,15 +464,202 @@ static LogicalResult getDOTGraph(handshake::FuncOp funcOp, DOTGraph &graph) {
   return success();
 }
 
+static StringRef getCFNodeShape(Operation *op) {
+  if (isa<BranchOpInterface>(op))
+    return "diamond";
+  if (op->hasTrait<OpTrait::IsTerminator>())
+    return "octagon";
+  if (op->getDialect()->getNamespace() == "arith")
+    return "oval";
+  return "box";
+}
+
+static StringRef getCFNodeColor(Operation *op) {
+  if (isa<memref::LoadOp, memref::StoreOp>(op))
+    return "coral";
+
+  StringRef dialect = op->getDialect()->getNamespace();
+  if (dialect == "cf")
+    return "lightsteelblue1";
+  if (dialect == "memref")
+    return "mistyrose";
+  if (dialect == "arith")
+    return "palegoldenrod";
+  if (dialect == "math")
+    return "plum1";
+  if (dialect == "func")
+    return "gold";
+  return "white";
+}
+
+static std::string getCFNodeLabel(Operation *op, unsigned blockIndex) {
+  std::string topLine;
+  if (auto attr = op->getAttrOfType<StringAttr>(NameAnalysis::ATTR_NAME))
+    topLine = attr.getValue().str();
+  else
+    topLine = op->getName().getStringRef().str();
+
+  std::string label = "bb" + std::to_string(blockIndex) + ": ";
+  label += std::move(topLine);
+  label += "\\n";
+  label += op->getName().getStringRef().str();
+  return label;
+}
+
+static LogicalResult getDOTGraph(func::FuncOp funcOp, DOTGraph &graph) {
+  DOTGraph::Builder builder(graph);
+  DOTGraph::Subgraph &root = builder.getRoot();
+  root.addAttr("label", funcOp.getName().str());
+  root.addAttr("labelloc", "t");
+  root.addAttr("fontname", "Helvetica");
+  root.addAttr("fontsize", "18");
+
+  using ValueNodeMap = llvm::DenseMap<Value, DOTGraph::Node *>;
+  ValueNodeMap valueNodes;
+  llvm::DenseMap<BlockArgument, llvm::SmallVector<Value>> blockArgSources;
+  llvm::DenseMap<BlockArgument, DOTGraph::Node *> blockArgNodes;
+
+  auto connectValue = [&](auto &&self, Value source, DOTGraph::Node *dstNode,
+                          llvm::SmallPtrSetImpl<Value> &visited) -> void {
+    if (!visited.insert(source).second)
+      return;
+    if (DOTGraph::Node *srcNode = valueNodes.lookup(source)) {
+      DOTGraph::Subgraph *edgeSubgraph =
+          srcNode->subgraph == dstNode->subgraph ? srcNode->subgraph : &root;
+      DOTGraph::Edge &edge = builder.addEdge(srcNode->id, dstNode->id,
+                                             *edgeSubgraph);
+      edge.addAttr("color", "#2f4f4f");
+      edge.addAttr("penwidth", "1.2");
+      return;
+    }
+    if (auto blockArg = source.dyn_cast<BlockArgument>()) {
+      auto it = blockArgSources.find(blockArg);
+      if (it == blockArgSources.end())
+        return;
+      for (Value incoming : it->second)
+        self(self, incoming, dstNode, visited);
+    }
+  };
+
+  unsigned blockIndex = 0;
+  for (Block &block : funcOp) {
+    std::string clusterSuffix = funcOp.getName().str();
+    clusterSuffix += "_bb" + std::to_string(blockIndex);
+    std::string clusterId = "cluster_" + clusterSuffix;
+    DOTGraph::Subgraph &bbSubgraph = builder.addSubgraph(clusterId, root);
+    bbSubgraph.addAttr("label", "bb " + std::to_string(blockIndex));
+    bbSubgraph.addAttr("style", "filled,rounded");
+    bbSubgraph.addAttr("color", "#d0d0d0");
+    bbSubgraph.addAttr("fillcolor", "#f9f9f9");
+
+    for (auto [argIndex, arg] : llvm::enumerate(block.getArguments())) {
+      llvm::SmallVector<Value> incomingValues;
+
+      for (Block *pred : block.getPredecessors()) {
+        Operation *terminator = pred->getTerminator();
+        auto branch = dyn_cast<BranchOpInterface>(terminator);
+        if (!branch)
+          continue;
+        for (auto [succIdx, succ] : llvm::enumerate(terminator->getSuccessors())) {
+          if (succ != &block)
+            continue;
+          SuccessorOperands succOps = branch.getSuccessorOperands(succIdx);
+          if (argIndex >= succOps.size())
+            continue;
+          Value incoming = succOps[argIndex];
+          if (!incoming)
+            continue;
+          incomingValues.push_back(incoming);
+        }
+      }
+
+      if (!incomingValues.empty())
+        blockArgSources.try_emplace(arg, std::move(incomingValues));
+
+      std::string argNodeId = clusterId + "_arg" + std::to_string(argIndex);
+      DOTGraph::Node *argNode = builder.addNode(argNodeId, bbSubgraph);
+      if (!argNode) {
+        funcOp.emitOpError() << "failed to create DOT node for block argument";
+        return failure();
+      }
+
+      std::string argLabel = "bb" + std::to_string(blockIndex) + ".arg" +
+                             std::to_string(argIndex);
+      std::string typeLabel;
+      llvm::raw_string_ostream typeOs(typeLabel);
+      arg.getType().print(typeOs);
+      typeOs.flush();
+
+      argNode->addAttr("label", "phi " + argLabel + "\\n" + typeLabel);
+      argNode->addAttr("mlir_op", "cf.block_arg");
+      argNode->addAttr("shape", "ellipse");
+      argNode->addAttr("style", "filled");
+      argNode->addAttr("fillcolor", "#eef2ff");
+      argNode->addAttr("fontname", "Helvetica");
+      argNode->addAttr("fontsize", "10");
+
+      blockArgNodes[arg] = argNode;
+      valueNodes[arg] = argNode;
+    }
+
+    for (Operation &op : block) {
+      if (isa<BranchOpInterface>(op))
+        continue;
+
+      std::string nodeId = getUniqueName(&op).str();
+      if (nodeId.empty())
+        nodeId = (op.getName().stripDialect().str() +
+                  std::to_string(reinterpret_cast<uintptr_t>(&op)));
+
+      DOTGraph::Node *node = builder.addNode(nodeId, bbSubgraph);
+      if (!node) {
+        op.emitError("failed to create DOT node");
+        return failure();
+      }
+
+      node->addAttr("label", getCFNodeLabel(&op, blockIndex));
+      node->addAttr("mlir_op", op.getName().getStringRef());
+      node->addAttr("shape", getCFNodeShape(&op));
+      node->addAttr("style", "filled");
+      node->addAttr("fillcolor", getCFNodeColor(&op));
+      node->addAttr("fontname", "Helvetica");
+      if (op.hasTrait<OpTrait::IsTerminator>())
+        node->addAttr("peripheries", "2");
+
+      for (Value operand : op.getOperands()) {
+        llvm::SmallPtrSet<Value, 8> visited;
+        connectValue(connectValue, operand, node, visited);
+      }
+
+      for (Value res : op.getResults())
+        valueNodes[res] = node;
+    }
+
+    ++blockIndex;
+  }
+
+  for (auto &entry : blockArgSources) {
+    BlockArgument arg = entry.first;
+    DOTGraph::Node *dstNode = blockArgNodes.lookup(arg);
+    if (!dstNode)
+      continue;
+    for (Value incoming : entry.second) {
+      llvm::SmallPtrSet<Value, 8> visited;
+      connectValue(connectValue, incoming, dstNode, visited);
+    }
+  }
+
+  return success();
+}
+
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
 
   cl::ParseCommandLineOptions(
       argc, argv,
-      "Exports a DOT graph corresponding to the module for visualization\n"
-      "and legacy-compatibility purposes.The pass only supports exporting\n"
-      "the graph of a single Handshake function at the moment, and will fail\n"
-      "if there is more than one Handhsake function in the module.");
+      "Exports a DOT graph for the single non-external function present in\n"
+      "the input module. By default the tool targets Handshake-level IR; pass\n"
+      "--ir-kind=cf to visualize control-flow (func/cf) IR.");
 
   auto fileOrErr = MemoryBuffer::getFileOrSTDIN(inputFileName.c_str());
   if (std::error_code error = fileOrErr.getError()) {
@@ -467,7 +673,8 @@ int main(int argc, char **argv) {
   // cases
   MLIRContext context;
   context.loadDialect<memref::MemRefDialect, arith::ArithDialect,
-                      handshake::HandshakeDialect, math::MathDialect>();
+                      handshake::HandshakeDialect, math::MathDialect,
+                      func::FuncDialect, cf::ControlFlowDialect>();
   context.allowUnregisteredDialects();
 
   // Load the MLIR module
@@ -478,19 +685,6 @@ int main(int argc, char **argv) {
   if (!modOp)
     return 1;
 
-  // We only support one function per module
-  handshake::FuncOp funcOp = nullptr;
-  for (auto op : modOp->getOps<handshake::FuncOp>()) {
-    if (op.isExternal())
-      continue;
-    if (funcOp) {
-      modOp->emitOpError() << "we currently only support one non-external "
-                              "handshake function per module";
-      return 1;
-    }
-    funcOp = op;
-  }
-
   // Name all operations in the IR
   NameAnalysis nameAnalysis = NameAnalysis(*modOp);
   if (!nameAnalysis.isAnalysisValid())
@@ -498,7 +692,59 @@ int main(int argc, char **argv) {
   nameAnalysis.nameAllUnnamedOps();
 
   DOTGraph graph;
-  if (failed(getDOTGraph(funcOp, graph)))
+  LogicalResult graphStatus = failure();
+
+  switch (irKind) {
+  case IRKind::Handshake: {
+    handshake::FuncOp target = nullptr;
+    for (handshake::FuncOp op : modOp->getOps<handshake::FuncOp>()) {
+      if (op.isExternal())
+        continue;
+      if (target) {
+        llvm::errs() << argv[0]
+                     << ": multiple non-external handshake functions found; "
+                        "only a single function is supported\n";
+        return 1;
+      }
+      target = op;
+    }
+
+    if (!target) {
+      llvm::errs() << argv[0]
+                   << ": no non-external handshake function found; "
+                      "consider --ir-kind=cf\n";
+      return 1;
+    }
+
+    graphStatus = getDOTGraph(target, graph);
+    break;
+  }
+  case IRKind::CF: {
+    func::FuncOp target = nullptr;
+    for (func::FuncOp op : modOp->getOps<func::FuncOp>()) {
+      if (op.isExternal())
+        continue;
+      if (target) {
+        llvm::errs() << argv[0]
+                     << ": multiple non-external func.func operations found; "
+                        "only a single function is supported\n";
+        return 1;
+      }
+      target = op;
+    }
+
+    if (!target) {
+      llvm::errs() << argv[0]
+                   << ": no non-external func.func found; try --ir-kind=handshake\n";
+      return 1;
+    }
+
+    graphStatus = getDOTGraph(target, graph);
+    break;
+  }
+  }
+
+  if (failed(graphStatus))
     return 1;
 
   graph.print(llvm::outs(), edgeStyle);

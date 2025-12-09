@@ -426,6 +426,14 @@
     "generator": "python $DYNAMATIC/experimental/tools/unit-generators/vhdl/vhdl-unit-generator.py -n $MODULE_NAME -o $OUTPUT_DIR/$MODULE_NAME.vhd -t ndwire -p bitwidth=$BITWIDTH extra_signals=$EXTRA_SIGNALS"
   },
   {
+    "name": "handshake.coverpoint",
+    "parameters": [
+      { "name": "DATA_TYPE", "type": "dataflow", "data-lb": 1, "extra-eq": 0 },
+      { "name": "COVERPOINT_ID", "type": "unsigned" }
+    ],
+    "generic": "$DYNAMATIC/data/vhdl/handshake/coverpoint.vhd"
+  },
+  {
     "name": "mem_to_bram",
     "generator": "python $DYNAMATIC/experimental/tools/unit-generators/vhdl/vhdl-unit-generator.py -n $MODULE_NAME -o $OUTPUT_DIR/$MODULE_NAME.vhd -t mem_to_bram -p addr_bitwidth=$ADDR_BITWIDTH data_bitwidth=$DATA_BITWIDTH"
   },

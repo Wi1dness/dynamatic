@@ -448,6 +448,20 @@
     "hdl": "verilog"
   },
   {
+    "name": "handshake.coverpoint",
+    "parameters": [
+      {
+        "name": "DATA_TYPE",
+        "type": "dataflow",
+        "data-lb": 1,
+        "extra-eq": 0
+      },
+      { "name": "COVERPOINT_ID", "type": "unsigned" }
+    ],
+    "generic": "$DYNAMATIC/data/verilog/handshake/coverpoint.v",
+    "hdl": "verilog"
+  },
+  {
     "name": "handshake.fork",
     "parameters": [
       { "name": "SIZE", "type": "unsigned", "lb": 1 },

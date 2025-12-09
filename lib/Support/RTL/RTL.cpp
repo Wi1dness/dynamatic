@@ -311,6 +311,7 @@ LogicalResult RTLMatch::registerBitwidthParameter(hw::HWModuleExternOp &modOp,
       handshakeOp == "handshake.negf" || handshakeOp == "handshake.divsi" ||
       handshakeOp == "handshake.absf" || handshakeOp == "handshake.divui" ||
       handshakeOp == "handshake.shrui" || handshakeOp == "handshake.remsi" ||
+      handshakeOp == "handshake.coverpoint" ||
       // the first input has data bitwidth
       handshakeOp == "handshake.speculator" ||
       handshakeOp == "handshake.spec_commit" ||
@@ -412,6 +413,7 @@ RTLMatch::registerExtraSignalParameters(hw::HWModuleExternOp &modOp,
       handshakeOp == "handshake.mulf" || handshakeOp == "handshake.muli" ||
       handshakeOp == "handshake.select" || handshakeOp == "handshake.sink" ||
       handshakeOp == "handshake.subf" || handshakeOp == "handshake.extui" ||
+      handshakeOp == "handshake.coverpoint" ||
       handshakeOp == "handshake.shli" || handshakeOp == "handshake.subi" ||
       handshakeOp == "handshake.spec_save_commit" ||
       handshakeOp == "handshake.speculator" ||

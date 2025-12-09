@@ -632,7 +632,8 @@ FunctionType InstanceOp::getModuleType() {
 static Operation *backtrackToMemInput(Value input) {
   Operation *inputOp = input.getDefiningOp();
   while (isa_and_present<handshake::ExtSIOp, handshake::ExtUIOp,
-                         handshake::TruncIOp, handshake::ForkOp>(inputOp))
+                         handshake::TruncIOp, handshake::ForkOp,
+                         handshake::CoverPointOp>(inputOp))
     inputOp = inputOp->getOperand(0).getDefiningOp();
   return inputOp;
 }

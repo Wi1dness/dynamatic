@@ -23,4 +23,6 @@ target_link_libraries(export-dot
   MLIRArithDialect
   MLIRMathDialect
   MLIRMemRefDialect
+  MLIRFuncDialect
+  MLIRControlFlowDialect
   )

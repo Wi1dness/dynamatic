@@ -575,6 +575,14 @@ ModuleDiscriminator::ModuleDiscriminator(Operation *op) {
         // Number of input channels
         addUnsigned("SIZE", op->getNumOperands());
       })
+      .Case<handshake::CoverPointOp>([&](handshake::CoverPointOp covOp) {
+        // Bitwidth and unique probe identifier
+        addType("DATA_TYPE", covOp.getResult());
+        if (auto idAttr = covOp->getAttrOfType<IntegerAttr>(
+                            handshake::CoverPointOp::COV_ID_ATTR_NAME))
+          addUnsigned("COVERPOINT_ID",
+                      static_cast<unsigned>(idAttr.getValue().getZExtValue()));
+      })
       .Case<handshake::BranchOp, handshake::SinkOp, handshake::NDWireOp>(
           [&](auto) {
             // Bitwidth
@@ -2109,6 +2117,7 @@ public:
         ConvertToHWInstance<handshake::ControlMergeOp>,
         ConvertToHWInstance<handshake::MuxOp>,
         ConvertToHWInstance<handshake::JoinOp>,
+        ConvertToHWInstance<handshake::CoverPointOp>,
         ConvertToHWInstance<handshake::BlockerOp>,
         ConvertToHWInstance<handshake::SourceOp>,
         ConvertToHWInstance<handshake::ConstantOp>,
