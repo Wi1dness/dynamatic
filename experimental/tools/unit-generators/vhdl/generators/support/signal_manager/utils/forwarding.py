@@ -25,5 +25,9 @@ def generate_forwarding_expression_for_signal(signal_name: str, in_extra_signal_
     if signal_name == "spec":
         return " or ".join(in_extra_signal_names)
 
+    if signal_name in ("schedcp_ts", "schedcp_covsum"):
+        # schedcp extras originate from the data operand (first enumerated)
+        return in_extra_signal_names[0]
+
     raise ValueError(
         f"Unsupported forwarding method for extra signal: {signal_name}")

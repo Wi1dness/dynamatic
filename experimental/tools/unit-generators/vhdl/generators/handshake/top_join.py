@@ -34,7 +34,7 @@ entity {name} is
     outs_ready   : in std_logic;
     -- outputs
     outs_valid   : out std_logic;
-    ins_ready    : in std_logic_vector({size} - 1 downto 0);
+    ins_ready    : out std_logic_vector({size} - 1 downto 0)
   );
 end entity;
 
@@ -76,11 +76,13 @@ def _generate_top_join_signal_manager(name, size, extra_signals):
         [{
             "name": "ins",
             "bitwidth": 0,
+            "size": size,
             "extra_signals": extra_signals
         },],
         [{
             "name": "outs",
             "bitwidth": 0,
+            "size": 0,
             "extra_signals": extra_signals
         }],
         extra_signals,

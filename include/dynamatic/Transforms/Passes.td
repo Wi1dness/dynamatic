@@ -189,6 +189,19 @@ def HandshakeInsertCoverPoint : DynamaticPass<"handshake-insert-coverpoint"> {
   let constructor = "dynamatic::createHandshakeInsertCoverPoint()";
 }
 
+def HandshakeInsertSchedCP : DynamaticPass<"handshake-insert-sched-cp"> {
+  let summary = "Insert transparent schedule coverage probes.";
+  let description = [{
+    Walks Handshake functions and inserts `handshake.sched_cp` operations on
+    control channels to observe dynamic scheduling metrics such as initiation
+    intervals and iteration latency. The probes are transparent and forward
+    their input control token to the output unmodified while tagging the edge
+    with a unique schedule coverage identifier and basic-block metadata when
+    available.
+  }];
+  let constructor = "dynamatic::createHandshakeInsertSchedCP()";
+}
+
 def HandshakeOptimizeBitwidths : DynamaticPass< "handshake-optimize-bitwidths", 
                                                 ["mlir::arith::ArithDialect"]> {
   let summary = "Optimize bitwidths of all channels.";
@@ -518,7 +531,5 @@ def LLVMMarkMemoryDependencies : Pass<"llvm-mark-memory-dependencies"> {
 
   let dependentDialects = ["mlir::LLVM::LLVMDialect"];
 }
-
-
 
 #endif // DYNAMATIC_TRANSFORMS_PASSES_TD

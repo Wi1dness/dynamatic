@@ -135,12 +135,14 @@ def _generate_valid_merger_signal_manager(name,
     # Map channels to inner component
     mappings = generate_default_mappings(in_channels + out_channels)
 
+    extra_signal_assignments_str = "\n  ".join(extra_signal_assignments)
+
     architecture = f"""
 -- Architecture of signal manager (valid merger)
 architecture arch of {name} is
 begin
 -- Forward extra signals to output channels
-{"\n  ".join(extra_signal_assignments)}
+{extra_signal_assignments_str}
 
 inner : entity work.{inner_name}(arch)
   port map(

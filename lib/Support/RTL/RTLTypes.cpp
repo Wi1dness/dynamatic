@@ -203,9 +203,11 @@ bool DataflowConstraints::verify(Attribute attr) const {
            numDownstreams.verify(channelType.getNumDownstreamExtraSignals()) &&
            numUpstreams.verify(channelType.getNumUpstreamExtraSignals());
   }
-  if (isa<handshake::ControlType>(ty)) {
-    return dataWidth.verify(0) && numExtras.verify(0) &&
-           numDownstreams.verify(0) && numUpstreams.verify(0);
+  if (auto ctrlType = dyn_cast<handshake::ControlType>(ty)) {
+    return dataWidth.verify(0) &&
+           numExtras.verify(ctrlType.getNumExtraSignals()) &&
+           numDownstreams.verify(ctrlType.getNumDownstreamExtraSignals()) &&
+           numUpstreams.verify(ctrlType.getNumUpstreamExtraSignals());
   }
   return false;
 }

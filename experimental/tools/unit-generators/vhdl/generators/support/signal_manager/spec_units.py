@@ -152,19 +152,23 @@ def generate_spec_units_signal_manager(
         # Control channels are not concatenated, just mapped directly
         mappings.extend(generate_mapping(ctrl_channel["name"], ctrl_channel))
 
+    decls_str = "\n  ".join(decls)
+    assignments_str = "\n  ".join(assignments)
+    mappings_str = ",\n      ".join(mappings)
+
     architecture = f"""
 -- Architecture of signal manager (spec_units)
 architecture arch of {name} is
-  {"\n  ".join(decls)}
+  {decls_str}
 begin
   -- Concat/slice data and extra signals
-  {"\n  ".join(assignments)}
+  {assignments_str}
 
   inner : entity work.{inner_name}(arch)
     port map(
       clk => clk,
       rst => rst,
-      {",\n      ".join(mappings)}
+      {mappings_str}
     );
 end architecture;
 """

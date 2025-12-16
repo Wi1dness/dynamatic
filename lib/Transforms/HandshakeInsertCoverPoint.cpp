@@ -45,7 +45,8 @@ public:
 
 private:
   static bool skipOp(mlir::Operation *op) {
-    return mlir::isa<handshake::CoverPointOp, handshake::BranchOp,
+    return mlir::isa<handshake::CoverPointOp, handshake::SchedCPOp,
+                     handshake::BranchOp,
                      handshake::ForkOp, handshake::LazyForkOp,
                      handshake::BufferOp, handshake::SinkOp>(op);
   }
@@ -64,9 +65,9 @@ private:
     if (auto cbranch = mlir::dyn_cast<handshake::ConditionalBranchOp>(user);
         cbranch && operandIdx != 0)
       return true;
-    return mlir::isa<handshake::CoverPointOp, handshake::ControlMergeOp,
-                     handshake::MergeOp, handshake::MuxOp,
-                     handshake::JoinOp>(def);
+    return mlir::isa<handshake::CoverPointOp, handshake::SchedCPOp,
+           handshake::ControlMergeOp, handshake::MergeOp,
+           handshake::MuxOp, handshake::JoinOp>(def);
   }
 
   static void doInstrument(handshake::FuncOp func,

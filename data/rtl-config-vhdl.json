@@ -333,6 +333,21 @@
   {
     "name": "handshake.buffer",
     "parameters": [
+      { "name": "BUFFER_TYPE", "type": "string", "generic": false },
+      { "name": "NUM_SLOTS", "type": "unsigned", "lb": 1 },
+      {
+        "name": "DATA_TYPE",
+        "type": "dataflow",
+        "data-eq": 0,
+        "extra-lb": 1,
+        "generic": false
+      }
+    ],
+    "generator": "python $DYNAMATIC/experimental/tools/unit-generators/vhdl/vhdl-unit-generator.py -n $MODULE_NAME -o $OUTPUT_DIR/$MODULE_NAME.vhd -t buffer -p buffer_type='\"$BUFFER_TYPE\"' num_slots=$NUM_SLOTS bitwidth=$BITWIDTH extra_signals=$EXTRA_SIGNALS"
+  },
+  {
+    "name": "handshake.buffer",
+    "parameters": [
       { "name": "BUFFER_TYPE", "type": "string", "eq": "ONE_SLOT_BREAK_DV", "generic": false },
       { "name": "NUM_SLOTS", "type": "unsigned", "eq": 1, "generic": false },
       {
@@ -534,6 +549,19 @@
     "hdl": "vhdl"
   },
   {
+    "name": "handshake.sched_cp",
+    "parameters": [
+      {
+        "name": "DATA_TYPE",
+        "type": "dataflow",
+        "data-eq": 0
+      },
+      { "name": "SCHEDCP_ID", "type": "unsigned" }
+    ],
+    "generator": "python $DYNAMATIC/experimental/tools/unit-generators/vhdl/vhdl-unit-generator.py -n $MODULE_NAME -o $OUTPUT_DIR/$MODULE_NAME.vhd -t sched_cp -p bitwidth=$BITWIDTH extra_signals=$EXTRA_SIGNALS schedcp_id=$SCHEDCP_ID",
+    "hdl": "vhdl"
+  },
+  {
     "name": "handshake.fork",
     "parameters": [
       { "name": "SIZE", "type": "unsigned", "lb": 1 },
@@ -548,6 +576,20 @@
     "generic": "$DYNAMATIC/data/vhdl/handshake/dataless/fork.vhd",
     "module-name": "fork_dataless",
     "dependencies": ["logic", "eager_fork_register_block"]
+  },
+  {
+    "name": "handshake.fork",
+    "parameters": [
+      { "name": "SIZE", "type": "unsigned", "lb": 1 },
+      {
+        "name": "DATA_TYPE",
+        "type": "dataflow",
+        "data-eq": 0,
+        "extra-lb": 1,
+        "generic": false
+      }
+    ],
+    "generator": "python $DYNAMATIC/experimental/tools/unit-generators/vhdl/vhdl-unit-generator.py -n $MODULE_NAME -o $OUTPUT_DIR/$MODULE_NAME.vhd -t fork -p size=$SIZE bitwidth=$BITWIDTH extra_signals=$EXTRA_SIGNALS"
   },
   {
     "name": "handshake.fork",
@@ -574,6 +616,20 @@
     "generic": "$DYNAMATIC/data/vhdl/handshake/dataless/lazy_fork.vhd",
     "module-name": "lazy_fork_dataless",
     "dependencies": ["logic"]
+  },
+  {
+    "name": "handshake.lazy_fork",
+    "parameters": [
+      { "name": "SIZE", "type": "unsigned", "lb": 1 },
+      {
+        "name": "DATA_TYPE",
+        "type": "dataflow",
+        "data-eq": 0,
+        "extra-lb": 1,
+        "generic": false
+      }
+    ],
+    "generator": "python $DYNAMATIC/experimental/tools/unit-generators/vhdl/vhdl-unit-generator.py -n $MODULE_NAME -o $OUTPUT_DIR/$MODULE_NAME.vhd -t lazy_fork -p size=$SIZE bitwidth=$BITWIDTH extra_signals=$EXTRA_SIGNALS"
   },
   {
     "name": "handshake.lazy_fork",
@@ -652,6 +708,21 @@
     "name": "handshake.control_merge",
     "parameters": [
       { "name": "SIZE", "type": "unsigned", "lb": 1 },
+      {
+        "name": "DATA_TYPE",
+        "type": "dataflow",
+        "data-eq": 0,
+        "extra-lb": 1,
+        "generic": false
+      },
+      { "name": "INDEX_TYPE", "type": "dataflow", "data-lb": 1, "extra-eq": 0 }
+    ],
+    "generator": "python $DYNAMATIC/experimental/tools/unit-generators/vhdl/vhdl-unit-generator.py -n $MODULE_NAME -o $OUTPUT_DIR/$MODULE_NAME.vhd -t control_merge -p size=$SIZE data_bitwidth=$DATA_BITWIDTH index_bitwidth=$INDEX_BITWIDTH extra_signals=$EXTRA_SIGNALS"
+  },
+  {
+    "name": "handshake.control_merge",
+    "parameters": [
+      { "name": "SIZE", "type": "unsigned", "lb": 1 },
       { "name": "DATA_TYPE", "type": "dataflow", "data-lb": 1, "extra-eq": 0 },
       { "name": "INDEX_TYPE", "type": "dataflow", "data-lb": 1, "extra-eq": 0 }
     ],
@@ -718,6 +789,19 @@
     "generic": "$DYNAMATIC/data/vhdl/handshake/dataless/cond_br.vhd",
     "module-name": "cond_br_dataless",
     "dependencies": ["join"]
+  },
+  {
+    "name": "handshake.cond_br",
+    "parameters": [
+      {
+        "name": "DATA_TYPE",
+        "type": "dataflow",
+        "data-eq": 0,
+        "extra-lb": 1,
+        "generic": false
+      }
+    ],
+    "generator": "python $DYNAMATIC/experimental/tools/unit-generators/vhdl/vhdl-unit-generator.py -n $MODULE_NAME -o $OUTPUT_DIR/$MODULE_NAME.vhd -t cond_br -p bitwidth=$BITWIDTH extra_signals=$EXTRA_SIGNALS"
   },
   {
     "name": "handshake.cond_br",
@@ -850,9 +934,33 @@
   },
   {
     "name": "handshake.join",
-    "parameters": [{ "name": "SIZE", "type": "unsigned", "lb": 1 }],
+    "parameters": [
+      { "name": "SIZE", "type": "unsigned", "lb": 1 },
+      {
+        "name": "DATA_TYPE",
+        "type": "dataflow",
+        "data-eq": 0,
+        "extra-eq": 0,
+        "generic": false
+      }
+    ],
     "generic": "$DYNAMATIC/data/vhdl/handshake/join.vhd",
     "module-name": "join_handshake",
+    "dependencies": ["join"]
+  },
+  {
+    "name": "handshake.join",
+    "parameters": [
+      { "name": "SIZE", "type": "unsigned", "lb": 1 },
+      {
+        "name": "DATA_TYPE",
+        "type": "dataflow",
+        "data-eq": 0,
+        "extra-lb": 1,
+        "generic": false
+      }
+    ],
+    "generator": "python $DYNAMATIC/experimental/tools/unit-generators/vhdl/vhdl-unit-generator.py -n $MODULE_NAME -o $OUTPUT_DIR/$MODULE_NAME.vhd -t top_join -p size=$SIZE extra_signals=$EXTRA_SIGNALS",
     "dependencies": ["join"]
   },
   {
@@ -866,6 +974,10 @@
   {
     "name": "handshake.rigidifier",
     "generator": "python $DYNAMATIC/experimental/tools/unit-generators/vhdl/vhdl-unit-generator.py -n $MODULE_NAME -o $OUTPUT_DIR/$MODULE_NAME.vhd -t ready_remover -p bitwidth=$BITWIDTH"
+  },
+  {
+    "name": "handshake.strip_extra_signal",
+    "generator": "python $DYNAMATIC/experimental/tools/unit-generators/vhdl/vhdl-unit-generator.py -n $MODULE_NAME -o $OUTPUT_DIR/$MODULE_NAME.vhd -t strip_extra_signal -p bitwidth=$BITWIDTH extra_signals=$EXTRA_SIGNALS"
   },
   {
     "name": "handshake.valid_merger",

@@ -312,6 +312,8 @@ LogicalResult RTLMatch::registerBitwidthParameter(hw::HWModuleExternOp &modOp,
       handshakeOp == "handshake.absf" || handshakeOp == "handshake.divui" ||
       handshakeOp == "handshake.shrui" || handshakeOp == "handshake.remsi" ||
       handshakeOp == "handshake.coverpoint" ||
+      handshakeOp == "handshake.strip_extra_signal" ||
+      handshakeOp == "handshake.sched_cp" ||
       // the first input has data bitwidth
       handshakeOp == "handshake.speculator" ||
       handshakeOp == "handshake.spec_commit" ||
@@ -402,12 +404,14 @@ RTLMatch::registerExtraSignalParameters(hw::HWModuleExternOp &modOp,
                                         llvm::StringRef handshakeOp,
                                         hw::ModuleType &modType) {
 
-  if (
+  if (handshakeOp == "handshake.cond_br") {
+    serializedParams["EXTRA_SIGNALS"] =
+        serializeExtraSignals(modType.getInputType(1));
+  } else if (
       // default (AllExtraSignalsMatch)
       handshakeOp == "handshake.addf" || handshakeOp == "handshake.addi" ||
       handshakeOp == "handshake.andi" || handshakeOp == "handshake.buffer" ||
       handshakeOp == "handshake.cmpf" || handshakeOp == "handshake.cmpi" ||
-      handshakeOp == "handshake.cond_br" ||
       handshakeOp == "handshake.constant" || handshakeOp == "handshake.extsi" ||
       handshakeOp == "handshake.fork" || handshakeOp == "handshake.merge" ||
       handshakeOp == "handshake.mulf" || handshakeOp == "handshake.muli" ||
@@ -429,6 +433,8 @@ RTLMatch::registerExtraSignalParameters(hw::HWModuleExternOp &modOp,
       handshakeOp == "handshake.extf" || handshakeOp == "handshake.maximumf" ||
       handshakeOp == "handshake.minimumf" || handshakeOp == "handshake.shrui" ||
       handshakeOp == "handshake.join" || handshakeOp == "handshake.remsi" ||
+      handshakeOp == "handshake.sched_cp" ||
+      handshakeOp == "handshake.strip_extra_signal" ||
       // the first input has extra signals
       handshakeOp == "handshake.load" || handshakeOp == "handshake.store" ||
       handshakeOp == "handshake.spec_commit" ||

@@ -256,18 +256,24 @@ def _generate_select_signal_manager(name, bitwidth, extra_signals):
         forwarding_assignments.extend(generate_signal_wise_forwarding(
             ["condition", "result_inner"], ["result"], signal_name))
 
+    concat_decls_str = "\n  ".join(concat_decls)
+    slice_decls_str = "\n  ".join(slice_decls)
+    concat_assignments_str = "\n  ".join(concat_assignments)
+    slice_assignments_str = "\n  ".join(slice_assignments)
+    forwarding_assignments_str = "\n  ".join(forwarding_assignments)
+
     architecture = f"""
 -- Architecture of selector signal manager
 architecture arch of {name} is
-  {"\n  ".join(concat_decls)}
-  {"\n  ".join(slice_decls)}
+  {concat_decls_str}
+  {slice_decls_str}
 begin
   -- Concatenate extra signals
-  {"\n  ".join(concat_assignments)}
-  {"\n  ".join(slice_assignments)}
+  {concat_assignments_str}
+  {slice_assignments_str}
 
   -- Forwarding logic
-  {"\n  ".join(forwarding_assignments)}
+  {forwarding_assignments_str}
 
   result <= result_inner;
   result_valid <= result_inner_valid;

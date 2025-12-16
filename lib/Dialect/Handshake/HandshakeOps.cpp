@@ -349,6 +349,28 @@ LogicalResult ControlMergeOp::verify() {
 
 OpResult ControlMergeOp::getDataResult() { return cast<OpResult>(getResult()); }
 
+//===----------------------------------------------------------------------===//
+// StripExtraSignalOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StripExtraSignalOp::verify() {
+  auto inputCtrl = dyn_cast<handshake::ControlType>(getInput().getType());
+  if (!inputCtrl)
+    return emitOpError("expects control operand");
+
+  auto resultCtrl = dyn_cast<handshake::ControlType>(getResult().getType());
+  if (!resultCtrl)
+    return emitOpError("expects control result");
+
+  if (!resultCtrl.getExtraSignals().empty())
+    return emitOpError("result must not carry extra signals");
+
+  if (inputCtrl.getNumExtraSignals() == 0)
+    (void)emitRemark("input already lacks extra signals; strip has no effect");
+
+  return success();
+}
+
 LogicalResult FuncOp::verify() {
   // If this function is external there is nothing to do.
   if (isExternal())
@@ -633,7 +655,7 @@ static Operation *backtrackToMemInput(Value input) {
   Operation *inputOp = input.getDefiningOp();
   while (isa_and_present<handshake::ExtSIOp, handshake::ExtUIOp,
                          handshake::TruncIOp, handshake::ForkOp,
-                         handshake::CoverPointOp>(inputOp))
+                         handshake::CoverPointOp, handshake::SchedCPOp>(inputOp))
     inputOp = inputOp->getOperand(0).getDefiningOp();
   return inputOp;
 }

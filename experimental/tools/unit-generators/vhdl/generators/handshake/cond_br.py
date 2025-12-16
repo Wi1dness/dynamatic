@@ -145,7 +145,7 @@ def _generate_cond_br_signal_manager(name, bitwidth, extra_signals):
         }, {
             "name": "condition",
             "bitwidth": 1,
-            "extra_signals": extra_signals
+            # "extra_signals": extra_signals
         }],
         [{
             "name": "trueOut",

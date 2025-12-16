@@ -51,6 +51,8 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Debug.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <utility>
 
@@ -59,6 +61,174 @@ using namespace mlir::func;
 using namespace mlir::affine;
 using namespace mlir::memref;
 using namespace dynamatic;
+
+static constexpr llvm::StringLiteral EXIT_PRED_BB_ATTR("dynamatic.exit_pred_bb");
+
+/// Enables (very verbose) debug messages for exit predecessor derivation in the
+/// cf-to-handshake lowering. This is intentionally controlled by an environment
+/// variable so it can be turned on for regression runs without recompiling.
+static bool isExitPredDeriveDebugEnabled() {
+  const char *v = std::getenv("DYNAMATIC_DEBUG_EXIT_PRED");
+  return v && v[0] != '\0' && std::string_view(v) != "0";
+}
+
+static void dumpBlockPretty(llvm::raw_ostream &os, Block *b) {
+  if (!b) {
+    os << "<null block>";
+    return;
+  }
+  os << "block@" << static_cast<const void *>(b);
+  if (Operation *term = b->getTerminator()) {
+    os << " term='" << term->getName() << "'";
+    if (Attribute raw = term->getAttr(BB_ATTR_NAME)) {
+      os << " " << BB_ATTR_NAME << "=";
+      if (auto bbAttr = dyn_cast<IntegerAttr>(raw)) {
+        os << bbAttr.getValue() << " : " << bbAttr.getType();
+      } else {
+        os << "<non-integer-attr:";
+        raw.print(os);
+        os << ">";
+      }
+    } else {
+      os << " " << BB_ATTR_NAME << "=<missing>";
+    }
+  } else {
+    os << " term=<none>";
+  }
+}
+
+/// Attempts to compute the unique predecessor basic-block ID of the unique
+/// return block in the function.
+///
+/// This is best-effort metadata for later passes; not all valid CFG shapes
+/// admit a unique predecessor of the return block (e.g., diamonds that join
+/// directly at the return). In those cases, we intentionally return
+/// std::nullopt and do *not* fail the conversion.
+///
+/// Requirements for successfully producing an ID:
+/// - The function must have exactly one block whose terminator is `func.return`.
+/// - That return block must have exactly one *unique predecessor block*
+///   (duplicate edges may exist transiently during conversion).
+/// - The predecessor's terminator must carry `handshake.bb`.
+static std::optional<unsigned>
+computeExitPredBBFromCFG(handshake::FuncOp funcOp) {
+  const bool debug = isExitPredDeriveDebugEnabled();
+
+  auto dbg = [&](auto &&fn) {
+    if (!debug)
+      return;
+    llvm::errs() << "[exit_pred] func='";
+    if (auto sym = funcOp->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
+      llvm::errs() << sym.getValue();
+    else
+      llvm::errs() << "<anonymous@" << static_cast<const void *>(&funcOp) << ">";
+    llvm::errs() << "': ";
+    fn();
+    llvm::errs() << "\n";
+  };
+
+  dbg([&] {
+    llvm::errs() << "begin derive '" << EXIT_PRED_BB_ATTR << "'";
+  });
+
+  Block *retBlock = nullptr;
+  unsigned numReturns = 0;
+  for (Block &b : funcOp) {
+    if (!isa<mlir::func::ReturnOp>(b.getTerminator()))
+      continue;
+    ++numReturns;
+    if (retBlock) {
+      dbg([&] {
+        llvm::errs() << "found multiple func.return blocks (at least "
+                     << numReturns << ")";
+      });
+      return std::nullopt;
+    }
+    retBlock = &b;
+  }
+  if (!retBlock) {
+    dbg([&] { llvm::errs() << "no func.return block"; });
+    return std::nullopt;
+  }
+
+  dbg([&] {
+    llvm::errs() << "return block: ";
+    dumpBlockPretty(llvm::errs(), retBlock);
+  });
+
+  // NOTE: In this conversion, the CFG may temporarily contain duplicated edges
+  // (e.g., cf.cond_br whose true/false destinations are the same). In such a
+  // case, MLIR will report multiple predecessors even though the set of unique
+  // predecessor blocks is a singleton. For our purposes, we accept the
+  // singleton unique-predecessor case.
+  llvm::SmallPtrSet<Block *, 4> uniquePreds;
+  unsigned numPredEdges = 0;
+  for (Block *pred : retBlock->getPredecessors()) {
+    ++numPredEdges;
+    uniquePreds.insert(pred);
+  }
+
+  dbg([&] {
+    llvm::errs() << "ret predecessors: edges=" << numPredEdges
+                 << " uniqueBlocks=" << uniquePreds.size();
+  });
+
+  if (debug) {
+    unsigned idx = 0;
+    for (Block *pred : retBlock->getPredecessors()) {
+      dbg([&] {
+        llvm::errs() << "  predEdge[" << idx++ << "]: ";
+        dumpBlockPretty(llvm::errs(), pred);
+      });
+    }
+  }
+
+  if (uniquePreds.size() != 1) {
+    dbg([&] {
+      llvm::errs() << "skip: expected exactly one unique predecessor block";
+    });
+    return std::nullopt;
+  }
+
+  Block *pred = *uniquePreds.begin();
+
+  Operation *predTerm = pred->getTerminator();
+  if (!predTerm) {
+    dbg([&] { llvm::errs() << "failed: predecessor has no terminator"; });
+    return std::nullopt;
+  }
+
+  dbg([&] {
+    llvm::errs() << "selected pred: ";
+    dumpBlockPretty(llvm::errs(), pred);
+  });
+
+  if (debug) {
+    dbg([&] {
+      llvm::errs() << "pred terminator: ";
+      predTerm->print(llvm::errs(),
+                     OpPrintingFlags().elideLargeElementsAttrs());
+    });
+  }
+
+  auto bbAttr = predTerm->getAttrOfType<mlir::IntegerAttr>(BB_ATTR_NAME);
+  if (!bbAttr) {
+    dbg([&] {
+      llvm::errs() << "failed: predecessor terminator missing '" << BB_ATTR_NAME
+                   << "'";
+    });
+    return std::nullopt;
+  }
+
+  dbg([&] {
+    llvm::errs() << "success: " << BB_ATTR_NAME << "=" << bbAttr.getValue()
+                 << " : " << bbAttr.getType();
+  });
+
+  // Accept both signless and unsigned integer attributes; avoid getInt() which
+  // asserts on non-signless.
+  return static_cast<unsigned>(bbAttr.getValue().getZExtValue());
+}
 
 //===-----------------------------------------------------------------------==//
 // Helper functions
@@ -243,6 +413,15 @@ LogicalResult LowerFuncToHandshake::matchAndRewrite(
     return failure();
 
   idBasicBlocks(funcOp, rewriter);
+
+  // While we still have a cf-level CFG (blocks + terminators) and after
+  // assigning 'handshake.bb' IDs, derive the unique predecessor of the unique
+  // return block and record it as metadata for later passes.
+  if (auto predBB = computeExitPredBBFromCFG(funcOp)) {
+    funcOp->setAttr(EXIT_PRED_BB_ATTR,
+                    rewriter.getUI32IntegerAttr(*predBB));
+  }
+
   return flattenAndTerminate(funcOp, rewriter, argReplacements);
 }
 
@@ -1075,6 +1254,16 @@ LogicalResult LowerFuncToHandshake::flattenAndTerminate(
 
   auto endOp = rewriter.create<handshake::EndOp>(lastOp->getLoc(), endOprds);
   endOp->setAttr(BB_ATTR_NAME, rewriter.getUI32IntegerAttr(exitBlockID));
+
+  // Attach exit-predecessor metadata to the end op.
+  //
+  // Strict policy: we only propagate metadata that was computed upstream on
+  // the handshake.func op. We do not try to "re-discover" the predecessor here
+  // since the source CF CFG is not reliably accessible at this point of the
+  // conversion pipeline.
+  if (auto predAttr = funcOp->getAttr(EXIT_PRED_BB_ATTR))
+    endOp->setAttr(EXIT_PRED_BB_ATTR, predAttr);
+
   return success();
 }
 

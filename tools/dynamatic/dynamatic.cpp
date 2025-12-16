@@ -272,7 +272,8 @@ public:
   static constexpr llvm::StringLiteral SHARING = "sharing";
   static constexpr llvm::StringLiteral RIGIDIFICATION = "rigidification";
   static constexpr llvm::StringLiteral DISABLE_LSQ = "disable-lsq";
-  static constexpr llvm::StringLiteral COVERAGE = "coverage";
+  static constexpr llvm::StringLiteral RV_COVERAGE = "rv-coverage";
+  static constexpr llvm::StringLiteral SCHED_COVERAGE = "sched-coverage";
 
   Compile(FrontendState &state)
       : Command("compile",
@@ -299,8 +300,8 @@ public:
     addFlag({DISABLE_LSQ, "Force usage of memory controllers instead of LSQs. "
                           "Warning: This may result in out-of-order memory "
                           "accesses, use with caution!"});
-  addFlag({COVERAGE,
-       "Insert ready/valid (handshake) coverpoints during compilation (disabled by default)"});
+   addFlag({RV_COVERAGE, "Insert ready/valid (handshake) coverpoints during compilation (disabled by default)"});
+   addFlag({SCHED_COVERAGE, "Insert schedule coverage probes (handshake.sched_cp) during compilation"});
   }
 
   CommandResult execute(CommandArguments &args) override;
@@ -678,13 +679,14 @@ CommandResult Compile::execute(CommandArguments &args) {
   std::string sharing = args.flags.contains(SHARING) ? "1" : "0";
   std::string rigidification = args.flags.contains(RIGIDIFICATION) ? "1" : "0";
   std::string disableLSQ = args.flags.contains(DISABLE_LSQ) ? "1" : "0";
-  std::string COVERAGE = args.flags.contains(COVERAGE) ? "1" : "0";
+  std::string rvCoverage = args.flags.contains(RV_COVERAGE) ? "1" : "0";
+  std::string schedCoverage = args.flags.contains(SCHED_COVERAGE) ? "1" : "0";
 
   return execCmd(script, state.dynamaticPath, state.getKernelDir(),
                  state.getOutputDir(), state.getKernelName(), buffers,
                  floatToString(state.targetCP, 3), sharing,
                  state.fpUnitsGenerator, rigidification, disableLSQ,
-                 fastTokenDelivery, milpSolver, COVERAGE);
+                 fastTokenDelivery, milpSolver, rvCoverage, schedCoverage);
 }
 
 CommandResult WriteHDL::execute(CommandArguments &args) {

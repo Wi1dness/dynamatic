@@ -20,6 +20,7 @@ DISABLE_LSQ=${10}
 FAST_TOKEN_DELIVERY=${11}
 MILP_SOLVER=${12}
 COVERPOINT_ENABLE=${13:-0}
+SCHEDCP_ENABLE=${14:-0}
 
 POLYGEIST_CLANG_BIN="$DYNAMATIC_DIR/bin/cgeist"
 CLANGXX_BIN="$DYNAMATIC_DIR/bin/clang++"
@@ -87,23 +88,6 @@ export_cfg() {
   # Convert DOT graph to PNG
   dot -Tpng "$f_dot" > "$f_png"
   exit_on_fail "Failed to convert $2 DOT to PNG" "Converted $2 DOT to PNG"
-  return 0
-}
-
-export_cf_dot() {
-  local f_input="$1"
-  local base_name="$(basename "$f_input")"
-  local f_dot="$COMP_DIR/${base_name}.dot"
-  local f_png="$COMP_DIR/${base_name}.png"
-
-  "$DYNAMATIC_EXPORT_DOT_BIN" "$f_input" \
-    "--edge-style=spline" \
-    "--ir-kind=cf" \
-    > "$f_dot"
-  exit_on_fail "Failed to create ${base_name} DOT" "Created ${base_name} DOT"
-
-  dot -Tpng "$f_dot" > "$f_png"
-  exit_on_fail "Failed to convert ${base_name} DOT to PNG" "Converted ${base_name} DOT to PNG"
   return 0
 }
 
@@ -248,6 +232,9 @@ HANDSHAKE_EXPORT_FLAGS=(--handshake-canonicalize --handshake-hoist-ext-instances
 if [[ $COVERPOINT_ENABLE -ne 0 ]]; then
   HANDSHAKE_EXPORT_FLAGS+=(--handshake-insert-coverpoint)
 fi
+if [[ $SCHEDCP_ENABLE -ne 0 ]]; then
+  HANDSHAKE_EXPORT_FLAGS+=(--handshake-insert-sched-cp --handshake-materialize --handshake-canonicalize --handshake-hoist-ext-instances)
+fi
 
 "$DYNAMATIC_OPT_BIN" "$F_HANDSHAKE_BUFFERED" \
   "${HANDSHAKE_EXPORT_FLAGS[@]}" \
@@ -257,7 +244,6 @@ exit_on_fail "Failed to canonicalize Handshake" "Canonicalized handshake"
 # Export to DOT
 export_dot "$F_HANDSHAKE_EXPORT" "$KERNEL_NAME"
 export_cfg "$F_CF_DYN_TRANSFORMED" "${KERNEL_NAME}_CFG"
-export_cf_dot "$F_CF_DYN_TRANSFORMED_MEM_DEP_MARKED"
 
 if [[ $USE_RIGIDIFICATION -ne 0 ]]; then
   # rigidification

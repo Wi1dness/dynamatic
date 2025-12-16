@@ -373,6 +373,36 @@ def LazyForkOp : Handshake_ForkOp<"lazy_fork"> {
   }];
 }
 
+def StripExtraSignalOp : Handshake_Op<"strip_extra_signal", [Pure]> {
+  let summary = "remove all extra signals from a control token";
+  let description = [{
+    Produces a control token identical to the input except that any extra
+    downstream signals are removed. Useful before interfacing with operations
+    that only accept plain control tokens.
+  }];
+
+  let arguments = (ins HandshakeType:$input);
+  let results = (outs HandshakeType:$result);
+
+  let skipDefaultBuilders = 1;
+  let builders = [OpBuilder<(
+    ins "Value":$input
+  ), [{
+    auto ctrlType = ::llvm::dyn_cast<handshake::ControlType>(input.getType());
+    assert(ctrlType && "strip_extra_signal expects control input");
+
+    auto resultType = ctrlType.copyWithExtraSignals({});
+
+    $_state.addOperands(input);
+    $_state.addTypes(resultType);
+  }]>];
+
+  let assemblyFormat =
+      "$input attr-dict `:` custom<HandshakeType>(type($input)) `->` "
+      "custom<HandshakeType>(type($result))";
+  let hasVerifier = 1;
+}
+
 def MergeOp : Handshake_Op<"merge", [
   Pure,
   // SameOperandsAndResultsType is a built-in variant of AllTypesMatch with useful
@@ -447,7 +477,10 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
   Pure, HasClock,
   VariadicHasElement<"dataOperands">,
   AllDataTypesMatchWithVariadic<"dataOperands", ["result"]>,
-  AllExtraSignalsMatchWithVariadic<"dataOperands", ["result", "index"]>,
+  AllExtraSignalsMatchWithVariadicExcept<"schedcp_ts", "dataOperands",
+                                         ["result"]>,
+  AllExtraSignalsMatchWithVariadicExcept<"schedcp_covsum", "dataOperands",
+                                         ["result"]>,
   // Interface declarations
   DeclareOpInterfaceMethods<MergeLikeOpInterface, ["getDataResult"]>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getResultName"]>
@@ -512,7 +545,7 @@ def BranchOp : Handshake_Op<"br", [
 
 def ConditionalBranchOp : Handshake_Op<"cond_br", [
   AllTypesMatch<["dataOperand", "trueResult", "falseResult"]>,
-  AllExtraSignalsMatch<["conditionOperand", "dataOperand", "trueResult", "falseResult"]>,
+  AllExtraSignalsMatch<["dataOperand", "trueResult", "falseResult"]>,
   IsIntSizedChannel<1, "conditionOperand">,
   DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>,
   DeclareOpInterfaceMethods<ControlInterface, ["isControl"]>,
@@ -659,6 +692,40 @@ def CoverPointOp : Handshake_Op<"coverpoint", [
   let extraClassDeclaration = [{
     static constexpr ::llvm::StringLiteral COV_ID_ATTR_NAME =
         "coverpoint_id";
+  }];
+}
+
+def SchedCPOp : Handshake_Op<"sched_cp", [
+  Pure,
+  SameOperandsAndResultType
+]> {
+  let summary = "Transparent schedule coverage probe";
+  let description = [{
+    Forwards its input control token to the output while allowing the backend
+    to instrument dynamic schedule metrics (e.g., initiation interval and
+    latency) on the traversed CFG edge.
+
+    Example:
+
+    ```mlir
+    %1 = sched_cp %0 : !handshake.control
+    ```
+  }];
+
+  let arguments = (ins ControlType:$input);
+  let results = (outs ControlType:$result);
+
+  let assemblyFormat = "$input attr-dict `:` type($result)";
+
+  let extraClassDeclaration = [{
+    static constexpr ::llvm::StringLiteral SCHED_ID_ATTR_NAME =
+        "schedcp_id";
+    static constexpr ::llvm::StringLiteral SRC_BB_ATTR_NAME =
+        "schedcp.src_bb";
+    static constexpr ::llvm::StringLiteral DST_BB_ATTR_NAME =
+        "schedcp.dst_bb";
+    static constexpr ::llvm::StringLiteral BACKEDGE_ATTR_NAME =
+        "schedcp.is_backedge";
   }];
 }
 

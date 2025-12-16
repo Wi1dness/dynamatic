@@ -571,7 +571,12 @@ ModuleDiscriminator::ModuleDiscriminator(Operation *op) {
         addUnsigned("SIZE", op->getNumOperands());
         addType("DATA_TYPE", op->getResult(0));
       })
-      .Case<handshake::JoinOp, handshake::BlockerOp>([&](auto) {
+      .Case<handshake::JoinOp>([&](handshake::JoinOp joinOp) {
+        // Number of input channels and control type (incl. extra signals)
+        addUnsigned("SIZE", op->getNumOperands());
+        addType("DATA_TYPE", joinOp.getResult());
+      })
+      .Case<handshake::BlockerOp>([&](auto) {
         // Number of input channels
         addUnsigned("SIZE", op->getNumOperands());
       })
@@ -582,6 +587,13 @@ ModuleDiscriminator::ModuleDiscriminator(Operation *op) {
                             handshake::CoverPointOp::COV_ID_ATTR_NAME))
           addUnsigned("COVERPOINT_ID",
                       static_cast<unsigned>(idAttr.getValue().getZExtValue()));
+      })
+      .Case<handshake::SchedCPOp>([&](handshake::SchedCPOp schedOp) {
+        addType("DATA_TYPE", schedOp.getResult());
+        if (auto idAttr = schedOp->getAttrOfType<IntegerAttr>(
+            handshake::SchedCPOp::SCHED_ID_ATTR_NAME))
+          addUnsigned("SCHEDCP_ID", static_cast<unsigned>(
+                  idAttr.getValue().getZExtValue()));
       })
       .Case<handshake::BranchOp, handshake::SinkOp, handshake::NDWireOp>(
           [&](auto) {
@@ -750,7 +762,11 @@ ModuleDiscriminator::ModuleDiscriminator(Operation *op) {
       .Case<handshake::SpecSaveCommitOp>(
           [&](handshake::SpecSaveCommitOp saveCommitOp) {
             addUnsigned("FIFO_DEPTH", saveCommitOp.getFifoDepth());
-          })
+      })
+      .Case<handshake::StripExtraSignalOp>(
+          [&](handshake::StripExtraSignalOp) {
+        // No parameters needed for these operations
+      })
       .Case<handshake::ReadyRemoverOp, handshake::ValidMergerOp>([&](auto) {
         // No parameters needed for these operations
       })
@@ -2118,6 +2134,7 @@ public:
         ConvertToHWInstance<handshake::MuxOp>,
         ConvertToHWInstance<handshake::JoinOp>,
         ConvertToHWInstance<handshake::CoverPointOp>,
+        ConvertToHWInstance<handshake::SchedCPOp>,
         ConvertToHWInstance<handshake::BlockerOp>,
         ConvertToHWInstance<handshake::SourceOp>,
         ConvertToHWInstance<handshake::ConstantOp>,
@@ -2128,6 +2145,7 @@ public:
         ConvertToHWInstance<handshake::StoreOp>,
         ConvertToHWInstance<handshake::NotOp>,
         ConvertToHWInstance<handshake::ReadyRemoverOp>,
+        ConvertToHWInstance<handshake::StripExtraSignalOp>,
         ConvertToHWInstance<handshake::ValidMergerOp>,
         ConvertToHWInstance<handshake::SharingWrapperOp>,
 

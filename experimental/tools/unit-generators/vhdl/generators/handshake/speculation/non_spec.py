@@ -82,14 +82,16 @@ def _generate_non_spec_signal_manager(name, bitwidth, extra_signals):
 
     # Slice dataOut_concat to create dataOut data and extra signals (except spec)
     assignments.extend(generate_slice(
-        "dataOut_concat", "dataOut", bitwidth, concat_layout))
+      "dataOut_concat", "dataOut", bitwidth, concat_layout))
+
+    assignments_str = "\n  ".join(assignments)
 
     architecture = f"""
 -- Architecture of non_spec signal manager
 architecture arch of {name} is
   signal dataIn_concat, dataOut_concat : std_logic_vector({bitwidth + extra_signals_without_spec_bitwidth} - 1 downto 0);
 begin
-  {"\n  ".join(assignments)}
+  {assignments_str}
   inner : entity work.{inner_name}(arch)
     port map(
       clk => clk,

@@ -143,10 +143,15 @@ def generate_buffered_signal_manager(
     # Map channels to inner component
     mappings = generate_default_mappings(in_channels + out_channels)
 
+    # Precompute joined strings to avoid inline expressions that break older parsers
+    forwarding_decls_str = "\n  ".join(forwarding_decls)
+    forwarding_assignments_str = "\n  ".join(forwarding_assignments)
+    output_assignments_str = "\n  ".join(output_assignments)
+
     architecture = f"""
 -- Architecture of signal manager (buffered)
 architecture arch of {name} is
-  {"\n  ".join(forwarding_decls)}
+  {forwarding_decls_str}
   {concat_decls}
   {slice_decls}
   {transfer_decls}
@@ -155,14 +160,14 @@ begin
   {transfer_assignments}
 
   -- Forward extra signals
-  {"\n  ".join(forwarding_assignments)}
+  {forwarding_assignments_str}
 
   -- Concat/split extra signals for buffer input/output
   {concat_assignments}
   {slice_assignments}
 
   -- Assign extra signals to output channels
-  {"\n  ".join(output_assignments)}
+  {output_assignments_str}
 
   inner : entity work.{inner_name}(arch)
     port map(

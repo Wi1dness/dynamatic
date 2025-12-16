@@ -16,6 +16,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Support/IndentedOstream.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/FormatVariadic.h"
 
 using std::tuple;
@@ -288,6 +289,10 @@ struct StartToControlConnector {
   void connectToDuv(Instance &duvInst) {
     duvInst.connect(argName + "_valid", "\'1\'")
         .connect(argName + "_ready", "open");
+
+    for (auto extra : type.getExtraSignals()) {
+      duvInst.connect(argName + "_" + extra.name.str(), "(others => '0')");
+    }
   }
 };
 
@@ -305,10 +310,19 @@ struct ControlToEndConnector {
   void declareSignals(mlir::raw_indented_ostream &os) {
     declareSTL(os, argName + "_valid");
     declareSTL(os, argName + "_ready");
+    for (auto extra : type.getExtraSignals()) {
+      declareSTL(os, argName + "_" + extra.name.str(),
+                 std::to_string(extra.getBitWidth()));
+    }
   }
   void connectToDuv(Instance &duvInst) {
     duvInst.connect(argName + "_valid", argName + "_valid")
         .connect(argName + "_ready", argName + "_ready");
+
+    for (auto extra : type.getExtraSignals()) {
+      duvInst.connect(argName + "_" + extra.name.str(),
+                      argName + "_" + extra.name.str());
+    }
   }
 };
 
@@ -541,6 +555,36 @@ void getOutputTagGeneration(mlir::raw_indented_ostream &os,
   }
 }
 
+static void emitCovsumReporter(mlir::raw_indented_ostream &os,
+                               VerificationContext &ctx) {
+  constexpr llvm::StringLiteral CovsumName("schedcp_covsum");
+  bool hasCovsum = false;
+
+  for (auto &[type, argName] :
+       getOutputArguments<handshake::ControlType>(ctx.funcOp)) {
+    for (auto extra : type.getExtraSignals()) {
+      if (extra.name.str() == CovsumName) {
+        hasCovsum = true;
+        break;
+      }
+    }
+    if (hasCovsum)
+      break;
+  }
+
+  if (!hasCovsum)
+    return;
+
+  os << "covsum_report_end : process(tb_clk, tb_rst)\n";
+  os << "begin\n";
+  os << "  if rising_edge(tb_clk) then\n";
+  os << "    if (end_valid = '1' and end_ready = '1') then\n";
+  os << "      report \"[[Transaction \" & integer'image(transaction_idx) & \"]] CovSum=0x\" & to_hstring(end_schedcp_covsum) severity note;\n";
+  os << "    end if;\n";
+  os << "  end if;\n";
+  os << "end process;\n\n";
+}
+
 void vhdlTbCodegen(VerificationContext &ctx) {
 
   std::error_code ec;
@@ -566,6 +610,7 @@ void vhdlTbCodegen(VerificationContext &ctx) {
   getMemoryInstanceGeneration(os, ctx);
   deriveGlobalCompletionSignal(os, ctx);
   getOutputTagGeneration(os, ctx);
+  emitCovsumReporter(os, ctx);
   os << COMMON_TB_BODY;
   os.unindent();
   os << "end architecture behavior;\n";

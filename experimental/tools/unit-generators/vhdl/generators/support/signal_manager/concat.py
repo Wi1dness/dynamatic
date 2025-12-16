@@ -137,19 +137,23 @@ def generate_concat_signal_manager(
         mappings.extend(generate_mapping(
             original_channel_name, concat_channel))
 
+    decls_str = "\n  ".join(decls)
+    assignments_str = "\n  ".join(assignments)
+    mappings_str = ",\n      ".join(mappings)
+
     architecture = f"""
 -- Architecture of signal manager (concat)
 architecture arch of {name} is
-  {"\n  ".join(decls)}
+  {decls_str}
 begin
   -- Concate/slice data and extra signals
-  {"\n  ".join(assignments)}
+  {assignments_str}
 
   inner : entity work.{inner_name}(arch)
     port map(
       clk => clk,
       rst => rst,
-      {",\n      ".join(mappings)}
+      {mappings_str}
     );
 end architecture;
 """

@@ -166,7 +166,7 @@ begin
   -- Sequential Process
   ----------------------------------------------------------------
 
-  {data("""
+  {data('''
   -------------------------------------------
   -- process for writing data
   -------------------------------------------
@@ -183,7 +183,7 @@ begin
       end if;
     end if;
   end process;
-  """, bitwidth)}
+  ''', bitwidth)}
 
   -------------------------------------------
   -- process for updating tail

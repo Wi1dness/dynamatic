@@ -138,6 +138,8 @@ def _generate_load_signal_manager(name, data_bitwidth, addr_bitwidth, extra_sign
     assignments.extend(generate_slice(
         "signals_post_buffer", "dataOut", 0, concat_layout))
 
+    assignments_str = "\n  ".join(assignments)
+
     architecture = f"""
 -- Architecture of load signal manager
 architecture arch of {name} is
@@ -149,7 +151,7 @@ begin
   transfer_out <= dataOut_valid and dataOut_ready;
 
   -- Concat/slice extra signals
-  {"\n  ".join(assignments)}
+  {assignments_str}
 
   -- Buffer to store extra signals for in-flight memory requests
   -- LoadOp is assumed to be connected to a memory controller

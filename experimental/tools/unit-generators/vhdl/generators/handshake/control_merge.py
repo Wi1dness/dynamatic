@@ -156,7 +156,7 @@ def _generate_control_merge_signal_manager(name, size, index_bitwidth, data_bitw
             "name": "index",
             "bitwidth": index_bitwidth,
             # TODO: Extra signals for index port are not tested
-            "extra_signals": extra_signals
+            # "extra_signals": extra_signals
         }, {
             "name": "outs",
             "bitwidth": data_bitwidth,
@@ -182,8 +182,10 @@ def _generate_control_merge_signal_manager(name, size, index_bitwidth, data_bitw
         "outs_inner", "outs", data_bitwidth, concat_layout))
 
     # Assign index extra signals (TODO: Remove this)
-    index_extra_signal_assignments = _generate_index_extra_signal_assignments(
-        "index", extra_signals)
+    # index_extra_signal_assignments = _generate_index_extra_signal_assignments(
+    #     "index", extra_signals)
+
+    assignments_str = "\n  ".join(assignments)
 
     architecture = f"""
 -- Architecture of signal manager (cmerge)
@@ -194,10 +196,9 @@ architecture arch of {name} is
   signal outs_inner_valid, outs_inner_ready : std_logic;
 begin
   -- Concat/slice data and extra signals
-  {"\n  ".join(assignments)}
+  {assignments_str}
 
   -- Assign index extra signals
-  {index_extra_signal_assignments}
 
   inner : entity work.{inner_name}(arch)
     port map(
