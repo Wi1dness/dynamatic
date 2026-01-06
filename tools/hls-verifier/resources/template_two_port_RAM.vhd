@@ -94,11 +94,16 @@ begin
         read_token(file_ptr, line_num, token);
 
         -- Read data from file into mem-array (for every transaction)
+        while (done /= '1') loop
+          wait until rising_edge(clk);
+        end loop;
+
         for i in 0 to DEPTH - 1 loop
           read_token(file_ptr, line_num, token);
           mem(i) := hex_str_to_logicVec(token, DATA_WIDTH);
         end loop;
         read_token(file_ptr, line_num, token);
+        wait until done = '0';
 
         -- Check for end of [[transaction]]
         if (token(1 to 16) /= "[[/transaction]]") then
@@ -183,29 +188,43 @@ begin
 
     -- Check if file path is defined
     if (TV_OUT /= "") then
-      wait until done = '1';
       index := 0;
-
-      -- Open file
-      file_open(file_status, file_ptr, TV_OUT, APPEND_MODE);
-      if (file_status /= OPEN_OK) then
-        assert false report "ERROR: Could not open file " & TV_OUT severity failure;
-      end if;
-
-      -- Write [[transaction]] entries in HLS TB format
-      write(line_num, "[[transaction]]    " & integer'image(index));
-      writeline(file_ptr, line_num);
-      --
-      for i in 0 to DEPTH - 1 loop
-        write(line_num, "0x" & hex_logicVec_to_str(mem(i)));
-        writeline(file_ptr, line_num);
+      while (done /= '1') loop
+        wait until rising_edge(clk);
       end loop;
-      --
-      write(line_num, string'("[[/transaction]]"));
-      writeline(file_ptr, line_num);
+      wait until done = '0';
 
-      -- Close file
-      file_close(file_ptr);
+      -- Main loop to write iteratively
+      while true loop
+        while (done /= '1') loop
+          wait until falling_edge(clk);
+        end loop;
+
+        -- Open file
+        file_open(file_status, file_ptr, TV_OUT, APPEND_MODE);
+        if (file_status /= OPEN_OK) then
+          assert false report "ERROR: Could not open file " & TV_OUT severity failure;
+        end if;
+
+        -- Write [[transaction]] entries in HLS TB format
+        write(line_num, "[[transaction]]    " & integer'image(index));
+        writeline(file_ptr, line_num);
+        --
+        for i in 0 to DEPTH - 1 loop
+          write(line_num, "0x" & hex_logicVec_to_str(mem(i)));
+          writeline(file_ptr, line_num);
+        end loop;
+        --
+        write(line_num, string'("[[/transaction]]"));
+        writeline(file_ptr, line_num);
+
+        -- Increment index for next [[transaction]]
+        index := index + 1;
+
+        -- Close file
+        file_close(file_ptr);
+        wait until done = '0';
+      end loop;
     end if;
     wait;
 

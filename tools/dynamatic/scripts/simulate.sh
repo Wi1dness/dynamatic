@@ -13,6 +13,7 @@ OUTPUT_DIR=$3
 KERNEL_NAME=$4
 VIVADO_PATH=$5
 VIVADO_FPU=$6
+TRANSACTIONS=${7:-1}
 
 # Generated directories/files
 SIM_DIR="$(realpath "$OUTPUT_DIR/sim")"
@@ -79,6 +80,14 @@ exit_on_fail "Failed to build kernel for IO gen." "Built kernel for IO gen."
 "$IO_GEN_BIN"
 exit_on_fail "Failed to run kernel for IO gen." "Ran kernel for IO gen." 
 
+# Reuse transaction 0 vectors for all remaining transactions.
+# This provides fixed multi-transaction input/output vectors without modifying
+# the C testbench.
+"$DYNAMATIC_DIR/tools/dynamatic/scripts/duplicate-tx0-vectors.sh" \
+  "$SIM_DIR" "$TRANSACTIONS"
+exit_on_fail "Failed to duplicate transaction 0 vectors" \
+            "Duplicated transaction 0 vectors"
+
 # Simulate and verify design
 echo_info "Launching Modelsim simulation"
 cd "$HLS_VERIFY_DIR"
@@ -87,6 +96,7 @@ if [ "$VIVADO_FPU" = "true" ]; then
   --sim-path="$SIM_DIR" \
   --kernel-name="$KERNEL_NAME" \
   --handshake-mlir="$OUTPUT_DIR/comp/handshake_export.mlir" \
+  --transactions="$TRANSACTIONS" \
   --vivado-fpu \
   > "../report.txt" 2>&1
 else
@@ -94,6 +104,7 @@ else
   --sim-path="$SIM_DIR" \
   --kernel-name="$KERNEL_NAME" \
   --handshake-mlir="$OUTPUT_DIR/comp/handshake_export.mlir" \
+  --transactions="$TRANSACTIONS" \
   > "../report.txt" 2>&1
 fi
 exit_on_fail "Simulation failed" "Simulation succeeded"

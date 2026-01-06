@@ -123,6 +123,7 @@ begin
         dout0_valid <= '1';
       else
         dout0_valid <= dout0_valid and (not dout0_ready);
+        tokenEmitted <= tokenEmitted and (dout0_valid or (not done));
       end if;
     end if;
   end process mem_to_port0;
@@ -165,7 +166,7 @@ begin
       -- Main loop to write iteratively
       while true loop
         while (done /= '1') loop
-          wait until rising_edge(clk);
+          wait until falling_edge(clk);
         end loop;
 
         -- Open file (every iteration)

@@ -199,11 +199,13 @@ static Res callKernel(Res (*kernel)(FunArgs...), RealArgs &&...args) {
 /// after kernel execution. Also logs the kernel's return value, if it has one.
 #ifdef HLS_VERIFICATION
 #include "stdint.h"
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <unordered_map>
 #include <vector>
 
 /// Whenever HLS_VERIFICATION is defined, this macro must contain the path to
@@ -220,6 +222,59 @@ static unsigned _transactionID_ = 0;
 /// Outpath path prefix for storing the value of a function argument to a file
 /// on disk.
 static std::string _outPrefix_;
+
+struct DumpFileState {
+  bool initialized = false;
+  bool finalized = false;
+};
+
+static std::unordered_map<std::string, DumpFileState> _dumpFileStates_;
+static bool _runtimeFinalizerRegistered_ = false;
+
+static void finalizeRuntimeFiles();
+
+static void ensureRuntimeFinalizerRegistered() {
+  if (_runtimeFinalizerRegistered_)
+    return;
+  std::atexit(finalizeRuntimeFiles);
+  _runtimeFinalizerRegistered_ = true;
+}
+
+static void ensureDumpFileInitialized(const std::string &filepath) {
+  ensureRuntimeFinalizerRegistered();
+  auto &state = _dumpFileStates_[filepath];
+  if (state.initialized && !state.finalized)
+    return;
+
+  std::ofstream outFile(filepath, std::ios::trunc);
+  if (!outFile.is_open()) {
+    std::cerr << "Failed to open " << filepath << std::endl;
+    exit(1);
+  }
+
+  outFile << "[[[runtime]]]" << std::endl;
+  state.initialized = true;
+  state.finalized = false;
+  outFile.close();
+}
+
+static void finalizeRuntimeFiles() {
+  for (auto &entry : _dumpFileStates_) {
+    auto &state = entry.second;
+    if (!state.initialized || state.finalized)
+      continue;
+
+    std::ofstream outFile(entry.first, std::ios::app);
+    if (!outFile.is_open()) {
+      std::cerr << "Failed to open " << entry.first
+                << " for finalization" << std::endl;
+      continue;
+    }
+
+    outFile << "[[[/runtime]]]" << std::endl;
+    state.finalized = true;
+  }
+}
 
 // NOLINTEND(readability-identifier-naming)
 
@@ -283,16 +338,17 @@ static void arrayPrinter(const T *arrayPtr, size_t size, OS &os) {
 template <typename T>
 void dumpHLSArg(const T &arg, const char *argName) {
   std::string filepath = _outPrefix_ + argName + ".dat";
-  std::ofstream outFile(filepath);
+  ensureDumpFileInitialized(filepath);
+
+  std::ofstream outFile(filepath, std::ios::app);
   if (!outFile.is_open()) {
     std::cerr << "Failed to open " << filepath << std::endl;
     exit(1);
   }
 
-  outFile << "[[[runtime]]]" << std::endl
-          << "[[transaction]] " << _transactionID_ << std::endl;
+  outFile << "[[transaction]] " << _transactionID_ << std::endl;
   dumpArg(arg, outFile);
-  outFile << "[[/transaction]]" << std::endl << "[[[/runtime]]]" << std::endl;
+  outFile << "[[/transaction]]" << std::endl;
   outFile.close();
 }
 

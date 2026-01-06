@@ -70,8 +70,9 @@ begin
     tb_stop <= '0';
   elsif rising_edge(tb_clk) then
     if (tb_global_valid = '1') then
-      tb_global_ready <= '0';
       tb_stop <= '1';
+    else
+      tb_stop <= '0';
     end if;
   end if;
 end process;
@@ -97,7 +98,7 @@ begin
     tb_start_valid <= '0';
     tb_started <= '0';
   elsif rising_edge(tb_clk) then
-    if (tb_started = '0') then
+    if (tb_temp_idle = '1' and transaction_idx /= TRANSACTION_NUM) then
       tb_start_valid <= '1';
       tb_started <= '1';
     else

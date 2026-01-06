@@ -7,6 +7,12 @@ BIN_PATH="${REPO_ROOT}/bin/dynamatic"
 REGRESSION_DIR="${SCRIPT_DIR}/regression"
 FILTER_REGEX="${1:-}"
 
+# Multi-transaction support:
+# - Pass as 2nd positional argument, e.g.:
+#     ./integration-test/run_regression.sh histogram 3
+# - Or via env var TRANSACTIONS.
+TRANSACTIONS_ARG="${2:-${TRANSACTIONS:-1}}"
+
 # Under `set -u`, referencing an unset array is an error. Define EXCEPTION_DUTS
 # as empty by default so is_exception_dut() is always safe.
 EXCEPTION_DUTS=(${EXCEPTION_DUTS[@]+"${EXCEPTION_DUTS[@]}"})
@@ -65,6 +71,7 @@ exec > >(tee -a "${SCRIPT_LOG}") 2>&1
 create_dyn_from_template() {
   local dut_name="$1"
   local source_rel_path="$2"
+  local transactions="$3"
   local compile_line
   local temp_dyn
   temp_dyn="$(mktemp "${RUN_DIR}/${dut_name}.XXXXXX.dyn")"
@@ -75,7 +82,7 @@ create_dyn_from_template() {
 set-src ${source_rel_path}
 ${compile_line}
 write-hdl
-simulate
+simulate --transactions ${transactions}
 exit
 EOF
 
@@ -86,9 +93,10 @@ run_dut() {
   local dut_dir="$1"
   local dut_name="$2"
   local source_rel="$3"
+  local transactions="$4"
 
   local temp_dyn
-  temp_dyn="$(create_dyn_from_template "${dut_name}" "${source_rel}")"
+  temp_dyn="$(create_dyn_from_template "${dut_name}" "${source_rel}" "${transactions}")"
 
   local log_file="${RUN_DIR}/${dut_name}.log"
   local sim_report_path="${dut_dir}/out/sim/report.txt"
@@ -97,6 +105,7 @@ run_dut() {
   echo "[RUN ] ${dut_name}"
   echo "       src -> ${dut_dir}/${dut_name}.c"
   echo "       log -> ${log_file}"
+  echo "       transactions -> ${transactions}"
 
   "${BIN_PATH}" --run "${temp_dyn}" >"${log_file}" 2>&1 || true
 
@@ -204,7 +213,7 @@ for dut_dir in "${DUT_DIRS[@]}"; do
 
   source_rel="${source_path#${REPO_ROOT}/}"
 
-  if run_dut "${dut_dir}" "${dut_name}" "${source_rel}"; then
+  if run_dut "${dut_dir}" "${dut_name}" "${source_rel}" "${TRANSACTIONS_ARG}"; then
     ((PASS += 1))
   else
     ((FAIL += 1))

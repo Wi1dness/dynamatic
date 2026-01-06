@@ -325,11 +325,17 @@ public:
 
 class Simulate : public Command {
 public:
+  static constexpr llvm::StringLiteral TRANSACTIONS = "transactions";
+
   Simulate(FrontendState &state)
       : Command("simulate",
                 "Simulates the VHDL produced during HDL writing using Modelsim "
                 "and the hls-verifier tool",
-                state) {}
+                state) {
+    addOption({TRANSACTIONS,
+               "Number of transactions to run in the generated testbench "
+               "(passed to hls-verifier as --transactions, default: 1)"});
+  }
 
   CommandResult execute(CommandArguments &args) override;
 };
@@ -722,9 +728,15 @@ CommandResult Simulate::execute(CommandArguments &args) {
     return CommandResult::FAIL;
 
   std::string script = state.getScriptsPath() + getSeparator() + "simulate.sh";
+
+  std::string transactions = "1";
+  if (auto it = args.options.find(TRANSACTIONS); it != args.options.end())
+    transactions = it->second;
+
   return execCmd(script, state.dynamaticPath, state.getKernelDir(),
                  state.getOutputDir(), state.getKernelName(), state.vivadoPath,
-                 state.fpUnitsGenerator == "vivado" ? "true" : "false");
+                 state.fpUnitsGenerator == "vivado" ? "true" : "false",
+                 transactions);
 }
 
 CommandResult Visualize::execute(CommandArguments &args) {

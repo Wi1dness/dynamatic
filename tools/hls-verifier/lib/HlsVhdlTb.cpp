@@ -21,6 +21,17 @@
 
 using std::tuple;
 
+static bool hasSchedCovsum(handshake::FuncOp *funcOp) {
+  constexpr llvm::StringLiteral CovsumName("schedcp_covsum");
+  for (auto &[type, _] : getOutputArguments<handshake::ControlType>(funcOp)) {
+    for (auto extra : type.getExtraSignals()) {
+      if (extra.name.str() == CovsumName)
+        return true;
+    }
+  }
+  return false;
+}
+
 // A Helper struct for connecting dynamatic's MemRef argument to a two-port RAM.
 // This grouping makes codegen more consistent in their code style, and
 // centralize the specialize handling in this struct.
@@ -116,7 +127,7 @@ struct MemRefToDualPortRAM {
         .parameter(DATA_DEPTH_PARAM, "DATA_DEPTH_" + argName)
         .connect(CLK_PORT, "tb_" + CLK_PORT)
         .connect(RST_PORT, "tb_" + RST_PORT)
-        .connect(DONE_PORT, "tb_stop");
+        .connect(DONE_PORT, "tb_temp_idle");
     for (auto &[_, portName, bitwidth] : memrefToDPRAM) {
       memInst.connect(portName, argName + "_" + portName);
     }
@@ -278,21 +289,37 @@ struct ChannelToEndConnector {
 struct StartToControlConnector {
   handshake::ControlType type;
   std::string argName;
+  bool hasSchedCovsum;
 
   StartToControlConnector(handshake::ControlType type,
-                          const std::string &argName)
-      : type(type), argName(argName) {}
+                          const std::string &argName, bool hasSchedCovsum)
+      : type(type), argName(argName), hasSchedCovsum(hasSchedCovsum) {}
 
   void declareSignals(mlir::raw_indented_ostream &os) {}
 
   // We just connect the control input channel to a constant source.
   void connectToDuv(Instance &duvInst) {
+    // Special-case the kernel start channel if the IR argument is named
+    // "start": this is a reserved interface and must be driven from the TB's
+    // multi-transaction driver, not tied to constants.
+    if (argName == "start") {
+      duvInst.connect("start_valid", "tb_start_valid")
+          .connect("start_ready", "tb_start_ready");
+      if (hasSchedCovsum) {
+        duvInst.connect("start_schedcp_covsum", "covsum_reg");
+        duvInst.connect("start_schedcp_ts", "(others => '0')");
+      }
+      return;
+    }
+
+    // Default behavior for other dataless inputs: drive with valid=1, ignore
+    // ready.
     duvInst.connect(argName + "_valid", "\'1\'")
         .connect(argName + "_ready", "open");
 
-    for (auto extra : type.getExtraSignals()) {
-      duvInst.connect(argName + "_" + extra.name.str(), "(others => '0')");
-    }
+    // for (auto extra : type.getExtraSignals()) {
+    //   duvInst.connect(argName + "_" + extra.name.str(), "(others => '0')");
+    // }
   }
 };
 
@@ -359,7 +386,8 @@ void getConstantDeclaration(mlir::raw_indented_ostream &os,
   }
   declareConstant(os, "HALF_CLK_PERIOD", "TIME", "2.00 ns");
   declareConstant(os, "RESET_LATENCY", "TIME", "10.00 ns");
-  declareConstant(os, "TRANSACTION_NUM", "INTEGER", to_string(1));
+  declareConstant(os, "TRANSACTION_NUM", "INTEGER",
+                  to_string(ctx.getTransactions()));
 }
 
 // This writes the signal declarations fot the testbench
@@ -396,7 +424,7 @@ void getSignalDeclaration(mlir::raw_indented_ostream &os,
   // Signals of control input channels
   for (auto &[type, argName] :
        getInputArguments<handshake::ControlType>(funcOp)) {
-    StartToControlConnector c(type, argName);
+    StartToControlConnector c(type, argName, hasSchedCovsum(funcOp));
     c.declareSignals(os);
   }
 
@@ -420,6 +448,15 @@ void getSignalDeclaration(mlir::raw_indented_ostream &os,
     ControlToEndConnector c(type, argName);
     c.declareSignals(os);
   }
+
+  declareSTL(os, "rst_reg", std::nullopt, "'0'");
+
+  // If schedule-coverage is enabled, the kernel's end control channel has an
+  // extra signal named "schedcp_covsum"; declare a TB-side register for
+  // covsum chaining (end->start across transactions).
+  if (hasSchedCovsum(funcOp))
+    declareSTL(os, "covsum_reg", "end_schedcp_covsum'length",
+               "(others => '0')");
 
   os << "\n";
 
@@ -461,7 +498,8 @@ void getDuvInstanceGeneration(mlir::raw_indented_ostream &os,
   Instance duvInst(duvName, "duv_inst");
 
   duvInst.connect(CLK_PORT, "tb_" + CLK_PORT)
-      .connect(RST_PORT, "tb_" + RST_PORT);
+      // .connect(RST_PORT, "tb_" + RST_PORT);
+      .connect(RST_PORT, "tb_" + RST_PORT + " or rst_reg");
 
   handshake::FuncOp *funcOp = ctx.funcOp;
 
@@ -476,7 +514,7 @@ void getDuvInstanceGeneration(mlir::raw_indented_ostream &os,
   // @Jiahui17: TODO: create a new argument for dataless input channels
   for (auto &[type, argName] :
        getInputArguments<handshake::ControlType>(funcOp)) {
-    StartToControlConnector c(type, argName);
+    StartToControlConnector c(type, argName, hasSchedCovsum(funcOp));
     c.connectToDuv(duvInst);
   }
 
@@ -557,32 +595,24 @@ void getOutputTagGeneration(mlir::raw_indented_ostream &os,
 
 static void emitCovsumReporter(mlir::raw_indented_ostream &os,
                                VerificationContext &ctx) {
-  constexpr llvm::StringLiteral CovsumName("schedcp_covsum");
-  bool hasCovsum = false;
-
-  for (auto &[type, argName] :
-       getOutputArguments<handshake::ControlType>(ctx.funcOp)) {
-    for (auto extra : type.getExtraSignals()) {
-      if (extra.name.str() == CovsumName) {
-        hasCovsum = true;
-        break;
-      }
-    }
-    if (hasCovsum)
-      break;
-  }
-
-  if (!hasCovsum)
+  if (!hasSchedCovsum(ctx.funcOp))
     return;
 
+  os << "\n";
+  os << "-- Capture end covsum and report it once per completed transaction.\n";
   os << "covsum_report_end : process(tb_clk, tb_rst)\n";
   os << "begin\n";
   os << "  if rising_edge(tb_clk) then\n";
-  os << "    if (end_valid = '1' and end_ready = '1') then\n";
+  os << "    rst_reg <= tb_stop;\n";
+  os << "    if (tb_rst = '1') then\n";
+  os << "      covsum_reg <= (others => '0');\n";
+  os << "      rst_reg <= '0';\n";
+  os << "    elsif (end_valid = '1' and end_ready = '1') then\n";
+  os << "      covsum_reg <= end_schedcp_covsum;\n";
   os << "      report \"[[Transaction \" & integer'image(transaction_idx) & \"]] CovSum=0x\" & to_hstring(end_schedcp_covsum) severity note;\n";
   os << "    end if;\n";
   os << "  end if;\n";
-  os << "end process;\n\n";
+  os << "end process;";
 }
 
 void vhdlTbCodegen(VerificationContext &ctx) {

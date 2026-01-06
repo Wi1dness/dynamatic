@@ -219,8 +219,6 @@ architecture arch of {name} is
             last_start_cycle <= (others => '0');
             activation_count <= (others => '0');
             activation_count(0) <= '1';
-            cov_bitmap       <= (others => '0');
-            covsum_reg       <= (others => '0');
         elsif rising_edge(clk) then
             cycle_counter <= cycle_counter + to_unsigned(1, cycle_counter'length);
 
