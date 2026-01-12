@@ -305,6 +305,7 @@ LogicalResult RTLMatch::registerBitwidthParameter(hw::HWModuleExternOp &modOp,
       handshakeOp == "handshake.merge" || handshakeOp == "handshake.muli" ||
       handshakeOp == "handshake.sink" || handshakeOp == "handshake.subi" ||
       handshakeOp == "handshake.shli" || handshakeOp == "handshake.blocker" ||
+      handshakeOp == "handshake.stall" ||
       handshakeOp == "handshake.sitofp" || handshakeOp == "handshake.fptosi" ||
       handshakeOp == "handshake.rigidifier" || handshakeOp == "handshake.ori" ||
       handshakeOp == "handshake.shrsi" || handshakeOp == "handshake.xori" ||
@@ -418,6 +419,7 @@ RTLMatch::registerExtraSignalParameters(hw::HWModuleExternOp &modOp,
       handshakeOp == "handshake.select" || handshakeOp == "handshake.sink" ||
       handshakeOp == "handshake.subf" || handshakeOp == "handshake.extui" ||
       handshakeOp == "handshake.coverpoint" ||
+      handshakeOp == "handshake.stall" ||
       handshakeOp == "handshake.shli" || handshakeOp == "handshake.subi" ||
       handshakeOp == "handshake.spec_save_commit" ||
       handshakeOp == "handshake.speculator" ||

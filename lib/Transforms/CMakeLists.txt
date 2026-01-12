@@ -10,6 +10,7 @@ add_dynamatic_library(DynamaticTransforms
   HandshakeHoistExtInstances.cpp
   HandshakeInsertCoverPoint.cpp
   HandshakeInsertSchedCP.cpp
+  HandshakeInsertMemStalls.cpp
   HandshakeMaterialize.cpp
   HandshakeMinimizeCstWidth.cpp
   HandshakeOptimizeBitwidths.cpp

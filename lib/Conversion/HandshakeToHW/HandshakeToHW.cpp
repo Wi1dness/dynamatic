@@ -770,6 +770,16 @@ ModuleDiscriminator::ModuleDiscriminator(Operation *op) {
       .Case<handshake::ReadyRemoverOp, handshake::ValidMergerOp>([&](auto) {
         // No parameters needed for these operations
       })
+      .Case<handshake::StallOp>([&](handshake::StallOp stallOp) {
+        // Data bitwidth
+        addType("DATA_TYPE", stallOp.getOperand());
+        // Configuration channel bitwidth (broadcast cfg payload)
+        addType("CFG_TYPE", stallOp.getCfg());
+        // Per-stall unique identifier (used to match cfg broadcast payloads)
+        if (auto idAttr = stallOp->getAttrOfType<IntegerAttr>(
+                handshake::StallOp::STALL_ID_ATTR_NAME))
+          addUnsigned("STALL_ID", idAttr.getInt());
+      })
       .Default([&](auto) {
         op->emitError() << "This operation cannot be lowered to RTL "
                            "due to a lack of an RTL implementation for it.";
@@ -2147,6 +2157,7 @@ public:
         ConvertToHWInstance<handshake::ReadyRemoverOp>,
         ConvertToHWInstance<handshake::StripExtraSignalOp>,
         ConvertToHWInstance<handshake::ValidMergerOp>,
+        ConvertToHWInstance<handshake::StallOp>,
         ConvertToHWInstance<handshake::SharingWrapperOp>,
 
         // Arith operations

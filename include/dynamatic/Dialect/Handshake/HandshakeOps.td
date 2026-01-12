@@ -668,6 +668,38 @@ def BlockerOp : Handshake_Op<"blocker", [
   let assemblyFormat = "$data attr-dict `:` type($result)";
 }
 
+def StallOp : Handshake_Op<"stall", [
+  HasClock,
+  AllTypesMatch<["operand", "result"]>,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName", "getResultName"]>
+]> {
+  let summary = "non-buffering stall gate";
+  let description = [{
+    A non-buffering gate on a handshake channel, used to artificially stall
+    token transfers for schedule-coverage fuzzing.
+
+    The op forwards data combinationally (it does not store tokens).
+    Stalling behavior is controlled by a broadcast configuration channel.
+    When the configuration payload's `id` matches this op's `id` attribute,
+    the op updates its local configuration registers.
+  }];
+
+  let arguments = (ins
+    HandshakeType:$operand,
+    ChannelType:$cfg
+  );
+
+  let results = (outs HandshakeType:$result);
+
+  let assemblyFormat = [{
+    $operand attr-dict `cfg` `(` $cfg `)` `:` type($operand) `,` type($cfg)
+  }];
+
+  let extraClassDeclaration = [{
+    static constexpr ::llvm::StringLiteral STALL_ID_ATTR_NAME = "stall_id";
+  }];
+}
+
 def CoverPointOp : Handshake_Op<"coverpoint", [
   Pure,
   SameOperandsAndResultType

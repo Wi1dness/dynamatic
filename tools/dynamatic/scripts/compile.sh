@@ -21,6 +21,7 @@ FAST_TOKEN_DELIVERY=${11}
 MILP_SOLVER=${12}
 COVERPOINT_ENABLE=${13:-0}
 SCHEDCP_ENABLE=${14:-0}
+SCHEDULE_RANDOMIZE_ENABLE=${15:-0}
 
 POLYGEIST_CLANG_BIN="$DYNAMATIC_DIR/bin/cgeist"
 CLANGXX_BIN="$DYNAMATIC_DIR/bin/clang++"
@@ -232,8 +233,18 @@ HANDSHAKE_EXPORT_FLAGS=(--handshake-canonicalize --handshake-hoist-ext-instances
 if [[ $COVERPOINT_ENABLE -ne 0 ]]; then
   HANDSHAKE_EXPORT_FLAGS+=(--handshake-insert-coverpoint)
 fi
+
+NEED_MATERIALIZE=0
 if [[ $SCHEDCP_ENABLE -ne 0 ]]; then
-  HANDSHAKE_EXPORT_FLAGS+=(--handshake-insert-sched-cp --handshake-materialize --handshake-canonicalize --handshake-hoist-ext-instances)
+  HANDSHAKE_EXPORT_FLAGS+=(--handshake-insert-sched-cp)
+  NEED_MATERIALIZE=1
+fi
+if [[ $SCHEDULE_RANDOMIZE_ENABLE -ne 0 ]]; then
+  HANDSHAKE_EXPORT_FLAGS+=(--handshake-insert-mem-stalls=stall-points-json=$COMP_DIR/stall_points.json)
+  NEED_MATERIALIZE=1
+fi
+if [[ $NEED_MATERIALIZE -ne 0 ]]; then
+  HANDSHAKE_EXPORT_FLAGS+=(--handshake-materialize --handshake-canonicalize --handshake-hoist-ext-instances)
 fi
 
 "$DYNAMATIC_OPT_BIN" "$F_HANDSHAKE_BUFFERED" \

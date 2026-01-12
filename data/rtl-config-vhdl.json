@@ -535,6 +535,27 @@
     "hdl": "verilog"
   },
   {
+    "name": "handshake.stall",
+    "parameters": [
+      {
+        "name": "DATA_TYPE",
+        "type": "dataflow",
+        "data-lb": 1,
+        "extra-eq": 0
+      },
+      {
+        "name": "CFG_TYPE",
+        "type": "dataflow",
+        "data-lb": 1,
+        "extra-eq": 0
+      },
+      { "name": "STALL_ID", "type": "unsigned" }
+    ],
+    "generic": "$DYNAMATIC/data/vhdl/handshake/stall.vhd",
+    "module-name": "stall",
+    "hdl": "vhdl"
+  },
+  {
     "name": "handshake.coverpoint",
     "parameters": [
       {

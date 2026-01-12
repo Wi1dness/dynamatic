@@ -92,6 +92,11 @@ mlir::LogicalResult compareCAndVhdlOutputs(const VerificationContext &ctx) {
 
     std::string argName = portAttr.dyn_cast<StringAttr>().data();
 
+    // The `cfg` channel is a special-purpose programming interface used by the
+    // schedule randomization flow and is not part of functional IO checking.
+    if (argName == "cfg")
+      continue;
+
     if (handshake::ChannelType type =
             dyn_cast<handshake::ChannelType>(arg.getType())) {
       argAndTypeMap.emplace_back(argName, type.getDataType());

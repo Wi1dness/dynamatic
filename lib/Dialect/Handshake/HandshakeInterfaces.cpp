@@ -136,6 +136,18 @@ std::string handshake::ConditionalBranchOp::getResultName(unsigned idx) {
   return idx == ConditionalBranchOp::trueIndex ? "trueOut" : "falseOut";
 }
 
+std::string handshake::StallOp::getOperandName(unsigned idx) {
+  assert(idx < getNumOperands() && "index too high");
+  // Keep data channel naming consistent with most unary Handshake ops,
+  // but preserve a dedicated name for the configuration/broadcast channel.
+  return idx == 0 ? "ins" : "cfg";
+}
+
+std::string handshake::StallOp::getResultName(unsigned idx) {
+  assert(idx == 0 && "index too high");
+  return "outs";
+}
+
 std::string handshake::ConstantOp::getOperandName(unsigned idx) {
   assert(idx == 0 && "index too high");
   return "ctrl";

@@ -88,6 +88,15 @@ exit_on_fail "Failed to run kernel for IO gen." "Ran kernel for IO gen."
 exit_on_fail "Failed to duplicate transaction 0 vectors" \
             "Duplicated transaction 0 vectors"
 
+# Generate per-transaction cfg text files for stall units (if any).
+# The VHDL TB reads these files during the cfg phase.
+python3 "$DYNAMATIC_DIR/tools/dynamatic/scripts/gen_stall_cfg_txts.py" \
+  --output "$INPUT_VECTORS_DIR" \
+  --json "$OUTPUT_DIR/comp/stall_points.json" \
+  --kernel "$KERNEL_NAME" \
+  --transactions "$TRANSACTIONS"
+exit_on_fail "Failed to generate stall cfg txts" "Generated stall cfg txts"
+
 # Simulate and verify design
 echo_info "Launching Modelsim simulation"
 cd "$HLS_VERIFY_DIR"

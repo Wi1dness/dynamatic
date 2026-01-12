@@ -51,13 +51,16 @@ is_exception_dut() {
 
 
 # Compile options: empty by default.
-# Enable by exporting SCHEDCOV=1 or RVCOV=1.
+# Enable by exporting SCHEDCOV=1, RVCOV=1, and/or SCHEDRAND=1.
 COMPILE_OPTS=""
 if [[ -n "${SCHEDCOV:-}" ]]; then
   COMPILE_OPTS="${COMPILE_OPTS} --sched-coverage"
 fi
 if [[ -n "${RVCOV:-}" ]]; then
   COMPILE_OPTS="${COMPILE_OPTS} --rv-coverage"
+fi
+if [[ -n "${SCHEDRAND:-}" ]]; then
+  COMPILE_OPTS="${COMPILE_OPTS} --schedule-randomize"
 fi
 
 mkdir -p "${REGRESSION_DIR}"
@@ -244,6 +247,16 @@ if [[ ${SKIP} -ne 0 ]]; then
 fi
 
 echo "Logs stored in: ${RUN_DIR}"
+
+# Generate per-DUT CovSum plots.
+# Only run when SCHEDCOV is enabled and covsum tokens exist in the aggregated log.
+# This avoids hard failures when some DUTs have missing reports or no covsum logs.
+if [[ -n "${SCHEDCOV:-}" ]]; then
+  PLOT_SCRIPT="${REPO_ROOT}/tools/dynamatic/scripts/plot_covsum.py"
+  PLOT_OUT_DIR="${RUN_DIR}/covsum_plots"
+  python3 "${PLOT_SCRIPT}" --log "${SCRIPT_LOG}" --out "${PLOT_OUT_DIR}"
+  echo "Plots stored in: ${PLOT_OUT_DIR}"
+fi
 
 if [[ ${FAIL} -ne 0 ]]; then
   exit -1

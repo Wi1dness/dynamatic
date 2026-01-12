@@ -124,6 +124,186 @@ begin
 end process;
 )DELIM";
 
+// Variant of COMMON_TB_BODY used when the kernel exposes a configuration
+// broadcast input channel named "cfg" (cfg/cfg_valid/cfg_ready).
+//
+// Semantics:
+// - After tb_temp_idle becomes '1' (i.e., between transactions), the TB sends
+//   a burst of cfg words (one per stall id) and waits for acceptance.
+// - When cfg is accepted, TB pulses cfg_done for one cycle.
+// - The DUV's reset port is expected to OR tb_rst with cfg_done, so cfg_done
+//   acts as a post-cfg reset pulse.
+// - tb_start_valid is asserted only after cfg has completed for the next
+//   transaction.
+static const string COMMON_TB_BODY_WITH_CFG = R"DELIM(
+
+generate_sim_done_proc : process
+begin
+  while (transaction_idx /= TRANSACTION_NUM) loop
+    wait until tb_clk'event and tb_clk = '1';
+  end loop;
+  wait until tb_clk'event and tb_clk = '1';
+  wait until tb_clk'event and tb_clk = '1';
+  wait until tb_clk'event and tb_clk = '1';
+  assert false
+  report "Simulation done! Latency = " & integer'image((now - RESET_LATENCY) / (2 * HALF_CLK_PERIOD)) & " cycles"
+  severity note;
+  assert false
+  report "NORMAL EXIT (note: failure is to force the simulator to stop)"
+  severity failure;
+  wait;
+end process;
+
+gen_clock_proc : process
+begin
+  tb_clk <= '0';
+  while (true) loop
+    wait for HALF_CLK_PERIOD;
+    tb_clk <= not tb_clk;
+  end loop;
+  wait;
+end process;
+
+gen_reset_proc : process
+begin
+  tb_rst <= '1';
+  wait for RESET_LATENCY;
+  tb_rst <= '0';
+  wait;
+end process;
+
+acknowledge_tb_end: process(tb_clk,tb_rst)
+begin
+  if (tb_rst = '1') then
+    tb_global_ready <= '1';
+    tb_stop <= '0';
+  elsif rising_edge(tb_clk) then
+    if (tb_global_valid = '1') then
+      tb_stop <= '1';
+    else
+      tb_stop <= '0';
+    end if;
+  end if;
+end process;
+
+generate_idle_signal: process(tb_clk,tb_rst)
+begin
+  if (tb_rst = '1') then
+    tb_temp_idle <= '1';
+  elsif rising_edge(tb_clk) then
+    tb_temp_idle <= tb_temp_idle;
+    if (tb_start_valid = '1') then
+      tb_temp_idle <= '0';
+    end if;
+    if(tb_stop = '1') then
+      tb_temp_idle <= '1';
+    end if;
+  end if;
+end process generate_idle_signal;
+
+-- Drive cfg broadcast between transactions by reading a per-transaction file,
+-- then pulse cfg_done.
+-- File name: CFG_FILE_DIR/CFG_FILE_PREFIX<transaction_idx>CFG_FILE_SUFFIX
+-- File format: one 128-bit word per line as 0x + 32 hex digits.
+generate_cfg_broadcast : process
+  file cfg_fp : text;
+  variable fstatus : file_open_status;
+  variable line_num : line;
+  variable token : string(1 to 128);
+  variable word : std_logic_vector(cfg_dout0'length - 1 downto 0);
+begin
+  -- Init defaults
+  cfg_dout0 <= (others => '0');
+  cfg_dout0_valid <= '0';
+  cfg_done <= '0';
+
+  wait until tb_rst = '0';
+
+  while true loop
+    -- Wait for the between-transactions idle phase.
+    while (tb_temp_idle /= '1') loop
+      wait until tb_clk'event and tb_clk = '1';
+    end loop;
+
+    -- Stop when all transactions are completed.
+    exit when transaction_idx = TRANSACTION_NUM;
+
+    -- Enter cfg phase for this upcoming transaction.
+    cfg_done <= '0';
+
+    file_open(fstatus, cfg_fp,
+              CFG_FILE_DIR & "/" & CFG_FILE_PREFIX & cfg_trim_int(transaction_idx) & CFG_FILE_SUFFIX,
+              READ_MODE);
+
+    if fstatus = NAME_ERROR then
+      report "ERROR: cfg file not found for transaction " & integer'image(transaction_idx) severity failure;
+    elsif fstatus = STATUS_ERROR then
+      report "ERROR: cfg file already open for transaction " & integer'image(transaction_idx) severity failure;
+    elsif fstatus = MODE_ERROR then
+      report "ERROR: cfg file mode error for transaction " & integer'image(transaction_idx) severity failure;
+    elsif fstatus /= OPEN_OK then
+      report "ERROR: unknown cfg file open error for transaction " & integer'image(transaction_idx) severity failure;
+    end if;
+
+    -- Stream cfg words. Hold each word until accepted.
+    while not endfile(cfg_fp) loop
+      read_token(cfg_fp, line_num, token);
+      word := hex_str_to_logicVec(token, cfg_dout0'length);
+      cfg_dout0 <= word;
+      cfg_dout0_valid <= '1';
+
+      -- Wait for acceptance.
+      wait until tb_clk'event and tb_clk = '1' and cfg_dout0_ready = '1';
+
+      cfg_dout0_valid <= '0';
+    end loop;
+
+    file_close(cfg_fp);
+
+    -- Pulse cfg_done for one cycle, then allow start.
+    cfg_done <= '1';
+    wait until tb_clk'event and tb_clk = '1';
+    cfg_done <= '0';
+
+    -- Wait until the transaction actually starts (idle drops) before looping.
+    wait until tb_temp_idle = '0';
+  end loop;
+
+  wait;
+end process;
+
+generate_start_signal : process(tb_clk, tb_rst)
+begin
+  if (tb_rst = '1') then
+    tb_start_valid <= '0';
+    tb_started <= '0';
+  elsif rising_edge(tb_clk) then
+    if (tb_temp_idle = '1' and cfg_done = '1' and transaction_idx /= TRANSACTION_NUM) then
+      tb_start_valid <= '1';
+      tb_started <= '1';
+    else
+      tb_start_valid <= tb_start_valid and (not tb_start_ready);
+    end if;
+  end if;
+end process generate_start_signal;
+
+transaction_increment : process
+begin
+  wait until tb_rst = '0';
+  while (tb_temp_idle /= '1') loop
+    wait until tb_clk'event and tb_clk = '1';
+  end loop;
+  wait until tb_temp_idle = '0';
+  while (true) loop
+    while (tb_temp_idle /= '1') loop
+      wait until tb_clk'event and tb_clk = '1';
+    end loop;
+    transaction_idx := transaction_idx + 1;
+    wait until tb_temp_idle = '0';
+  end loop;
+end process;
+)DELIM";
+
 static const string PROC_WRITE_TRANSACTIONS = R"DELIM(
 write_output_transactor_{0}_runtime_proc : process
   file fp             : TEXT;

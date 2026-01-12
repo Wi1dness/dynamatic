@@ -202,6 +202,26 @@ def HandshakeInsertSchedCP : DynamaticPass<"handshake-insert-sched-cp"> {
   let constructor = "dynamatic::createHandshakeInsertSchedCP()";
 }
 
+def HandshakeInsertMemStalls : DynamaticPass<"handshake-insert-mem-stalls"> {
+  let summary = "Insert handshake.stall gates at memory boundaries.";
+  let description = [{
+    Walks internal `handshake.func` operations and inserts `handshake.stall`
+    operations on the load/store memory channels (address and data) at the
+    boundary between memory operations (`handshake.load`/`handshake.store`) and
+    the memory subsystem (`handshake.mem_controller` / `handshake.lsq`).
+
+    The inserted stall points are controlled by a broadcast configuration
+    handshake channel and are identified by unique integer IDs.
+  }];
+
+  let options = [
+    Option<"stallPointsJson", "stall-points-json", "std::string",
+           /*default=*/"\"\"",
+           "Output path for stall_points.json (empty disables emission).">,
+  ];
+  let constructor = "dynamatic::createHandshakeInsertMemStalls()";
+}
+
 def HandshakeOptimizeBitwidths : DynamaticPass< "handshake-optimize-bitwidths", 
                                                 ["mlir::arith::ArithDialect"]> {
   let summary = "Optimize bitwidths of all channels.";

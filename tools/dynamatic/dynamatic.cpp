@@ -274,6 +274,7 @@ public:
   static constexpr llvm::StringLiteral DISABLE_LSQ = "disable-lsq";
   static constexpr llvm::StringLiteral RV_COVERAGE = "rv-coverage";
   static constexpr llvm::StringLiteral SCHED_COVERAGE = "sched-coverage";
+  static constexpr llvm::StringLiteral SCHEDULE_RANDOMIZE = "schedule-randomize";
 
   Compile(FrontendState &state)
       : Command("compile",
@@ -302,6 +303,7 @@ public:
                           "accesses, use with caution!"});
    addFlag({RV_COVERAGE, "Insert ready/valid (handshake) coverpoints during compilation (disabled by default)"});
    addFlag({SCHED_COVERAGE, "Insert schedule coverage probes (handshake.sched_cp) during compilation"});
+    addFlag({SCHEDULE_RANDOMIZE, "Insert non-buffering stall gates (handshake.stall) during compilation"});
   }
 
   CommandResult execute(CommandArguments &args) override;
@@ -687,12 +689,15 @@ CommandResult Compile::execute(CommandArguments &args) {
   std::string disableLSQ = args.flags.contains(DISABLE_LSQ) ? "1" : "0";
   std::string rvCoverage = args.flags.contains(RV_COVERAGE) ? "1" : "0";
   std::string schedCoverage = args.flags.contains(SCHED_COVERAGE) ? "1" : "0";
+  std::string scheduleRandomize =
+      args.flags.contains(SCHEDULE_RANDOMIZE) ? "1" : "0";
 
   return execCmd(script, state.dynamaticPath, state.getKernelDir(),
                  state.getOutputDir(), state.getKernelName(), buffers,
                  floatToString(state.targetCP, 3), sharing,
                  state.fpUnitsGenerator, rigidification, disableLSQ,
-                 fastTokenDelivery, milpSolver, rvCoverage, schedCoverage);
+                 fastTokenDelivery, milpSolver, rvCoverage, schedCoverage,
+                 scheduleRandomize);
 }
 
 CommandResult WriteHDL::execute(CommandArguments &args) {
