@@ -7,7 +7,7 @@ def generate_sched_cp(name, params):
     bitwidth = int(params.get("bitwidth", 0))
     extra_signals = params.get("extra_signals", {}) or {}
     schedcp_id = int(params.get("schedcp_id", 0))
-    bitmap_lg2 = int(params.get("bitmap_lg2", 9))
+    bitmap_lg2 = int(params.get("bitmap_lg2", 16))
 
     if bitmap_lg2 < 1:
         raise ValueError("bitmap_lg2 must be >= 1")
@@ -199,7 +199,8 @@ architecture arch of {name} is
 
     handshake_fire <= '1' when (ins_valid = '1' and outs_ready = '1') else '0';
     start_cycle_val <= resize(unsigned(ins_schedcp_ts), TIMESTAMP_WIDTH);
-    interval_val    <= start_cycle_val - last_start_cycle;
+    interval_val    <= (others => '0') when (activation_count = to_unsigned(1, activation_count'length))
+                      else (start_cycle_val - last_start_cycle);
     latency_val     <= cycle_counter - start_cycle_val;
     rotated_interval <= rotate_left(interval_val, 1);
     rotated_count    <= rotate_left(activation_count, 2);
