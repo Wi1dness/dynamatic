@@ -240,7 +240,7 @@ if [[ $SCHEDCP_ENABLE -ne 0 ]]; then
   NEED_MATERIALIZE=1
 fi
 if [[ $SCHEDULE_RANDOMIZE_ENABLE -ne 0 ]]; then
-  HANDSHAKE_EXPORT_FLAGS+=(--handshake-insert-mem-stalls=stall-points-json=$COMP_DIR/stall_points.json)
+  HANDSHAKE_EXPORT_FLAGS+=(--handshake-insert-mem-stalls="stall-points-json=$COMP_DIR/stall_points.json timing-models=$DYNAMATIC_DIR/data/components.json target-period=$TARGET_CP")
   NEED_MATERIALIZE=1
 fi
 if [[ $NEED_MATERIALIZE -ne 0 ]]; then

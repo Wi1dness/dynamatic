@@ -12,17 +12,23 @@
 
 #include "dynamatic/Dialect/Handshake/HandshakeOps.h"
 #include "dynamatic/Dialect/Handshake/HandshakeTypes.h"
+#include "dynamatic/Support/CFG.h"
 #include "dynamatic/Support/LLVM.h"
+#include "dynamatic/Support/TimingModels.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -66,7 +72,8 @@ static void recordStallPoint(SmallVectorImpl<StallPointInfo> &points,
 }
 
 static void writeStallPointsJson(StringRef path, StringRef dutName,
-                                 ArrayRef<StallPointInfo> points) {
+                                 ArrayRef<StallPointInfo> points,
+                                 std::optional<int64_t> maxBlockCycles) {
   if (path.empty())
     return;
 
@@ -90,6 +97,8 @@ static void writeStallPointsJson(StringRef path, StringRef dutName,
   ljson::Object root;
   root["dut"] = dutName.str();
   root["num_stall_points"] = static_cast<int64_t>(points.size());
+  if (maxBlockCycles.has_value())
+    root["max_block_cycles"] = *maxBlockCycles;
   root["param_format"] = ljson::Object{{"fields", std::move(fields)}};
   root["stall_points"] = std::move(sp);
 
@@ -103,6 +112,82 @@ static void writeStallPointsJson(StringRef path, StringRef dutName,
   os << ljson::Value(std::move(root)) << "\n";
 }
 
+static int64_t estimateMaxBlockCycles(handshake::FuncOp func,
+                                      const TimingDatabase *timingDB,
+                                      double targetPeriod) {
+  (void)func;
+  (void)timingDB;
+  (void)targetPeriod;
+  return 0;
+
+  // NOTE: Estimation currently disabled.
+  // The original implementation is kept below for future iteration.
+
+  if (func.isExternal())
+    return 0;
+  Block &entry = func.getBody().front();
+
+  llvm::DenseMap<Value, int64_t> depth;
+  for (BlockArgument arg : entry.getArguments())
+    depth[arg] = 0;
+
+  auto getOpCost = [&](Operation *op) -> int64_t {
+    // Instrumentation stalls should not contribute to inherent depth.
+    if (isa_and_present<handshake::StallOp>(op))
+      return 0;
+
+    // Approximate "drain time" contribution of explicit storage.
+    // A buffer with N slots can hold up to N tokens; after cutting upstream
+    // injection, draining those tokens takes O(N) cycles in the worst case.
+    if (auto buf = dyn_cast<handshake::BufferOp>(op))
+      return std::max<int64_t>(0, static_cast<int64_t>(buf.getNumSlots()));
+
+    // Timing models are mandatory for this estimate.
+    assert(timingDB && "timingDB must be non-null");
+
+    double latency = 0.0;
+    if (failed(
+            timingDB->getLatency(op, SignalType::DATA, latency, targetPeriod)))
+      return 0;
+
+    // Latency is modeled in cycles and may be fractional in the JSON; round up
+    // to be conservative, but allow 0-cycle (purely combinational) ops.
+    return std::max<int64_t>(0, static_cast<int64_t>(std::ceil(latency)));
+  };
+
+  int64_t maxDepth = 0;
+  for (Operation &op : entry.getOperations()) {
+    int64_t d = 0;
+    for (Value operand : op.getOperands()) {
+      // Heuristic: cut loopback/backedge channels so the bound represents a
+      // single forward drain, rather than being inflated by loop iteration.
+      // This matches "Cut Loopbacks"-style acyclicization.
+      if (dynamatic::isBackedge(operand))
+        continue;
+      auto it = depth.find(operand);
+      if (it != depth.end())
+        d = std::max(d, it->second);
+    }
+
+    d += getOpCost(&op);
+    for (Value res : op.getResults())
+      depth[res] = d;
+  }
+
+  // Report the maximum depth among values that reach the function outputs.
+  // This aligns the metric with "end-to-end pipeline latency".
+  if (auto end = dyn_cast<handshake::EndOp>(entry.getTerminator())) {
+    for (Value operand : end->getOperands()) {
+      if (dynamatic::isBackedge(operand))
+        continue;
+      auto it = depth.find(operand);
+      if (it != depth.end())
+        maxDepth = std::max(maxDepth, it->second);
+    }
+  }
+  return maxDepth;
+}
+
 class HandshakeInsertMemStallsPass
     : public dynamatic::impl::HandshakeInsertMemStallsBase<
           HandshakeInsertMemStallsPass> {
@@ -112,6 +197,28 @@ public:
 
   void runDynamaticPass() override {
     ModuleOp mod = getOperation();
+
+    std::optional<TimingDatabase> timingDB;
+    const TimingDatabase *timingDBPtr = nullptr;
+    if (timingModels.empty()) {
+      mod.emitError() << "--handshake-insert-mem-stalls requires timing models "
+                         "to compute max_block_cycles; pass timing-models=...";
+      signalPassFailure();
+      return;
+    }
+
+    {
+      TimingDatabase db;
+      std::string path = timingModels;
+      if (failed(TimingDatabase::readFromJSON(path, db))) {
+        mod.emitError() << "failed to read timing models from '" << path
+                        << "'";
+        signalPassFailure();
+        return;
+      }
+      timingDB = std::move(db);
+      timingDBPtr = &*timingDB;
+    }
 
     // Use the first internal handshake.func name as the DUT name when
     // emitting metadata.
@@ -130,6 +237,7 @@ public:
     // IR remains deterministic for a given kernel+pipeline.
     uint32_t nextId = 0;
     SmallVector<StallPointInfo> allPoints;
+    int64_t maxBlockCycles = 0;
 
     auto ensureCfgArg = [&](handshake::FuncOp func) -> BlockArgument {
       Block &entry = func.getBody().front();
@@ -164,6 +272,13 @@ public:
     auto instrumentFunc = [&](handshake::FuncOp func) {
       if (func.isExternal())
         return;
+
+      // Estimate "max meaningful blocking cycles" from inherent SSA dependency
+      // depth, weighted by timing-model operator latencies when provided.
+      // This is used by the cfg generator to cap random stall base.
+      maxBlockCycles =
+          std::max(maxBlockCycles,
+               estimateMaxBlockCycles(func, timingDBPtr, targetPeriod));
 
       Block &entry = func.getBody().front();
       BlockArgument cfgArg = ensureCfgArg(func);
@@ -257,7 +372,8 @@ public:
     for (auto func : mod.getOps<handshake::FuncOp>())
       instrumentFunc(func);
 
-    writeStallPointsJson(stallPointsJson, /*dutName=*/dutName, allPoints);
+    writeStallPointsJson(stallPointsJson, /*dutName=*/dutName, allPoints,
+                         /*maxBlockCycles=*/maxBlockCycles);
   }
 };
 

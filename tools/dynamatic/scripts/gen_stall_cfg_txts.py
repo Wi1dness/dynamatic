@@ -7,18 +7,24 @@ import random
 from pathlib import Path
 
 
-def read_ids(json_path: Path) -> list[int]:
+def read_ids_and_cap(json_path: Path) -> tuple[list[int], int | None]:
     try:
         with json_path.open("r", encoding="utf-8") as f:
             obj = json.load(f)
     except FileNotFoundError:
-        return []
+        return ([], None)
     except Exception:
-        return []
+        return ([], None)
+
+    cap = obj.get("max_block_cycles")
+    if isinstance(cap, int) and cap > 0:
+        max_block_cycles: int | None = cap
+    else:
+        max_block_cycles = None
 
     pts = obj.get("stall_points")
     if not isinstance(pts, list):
-        return []
+        return ([], max_block_cycles)
 
     ids: set[int] = set()
     for elt in pts:
@@ -27,7 +33,7 @@ def read_ids(json_path: Path) -> list[int]:
         v = elt.get("id")
         if isinstance(v, int) and v >= 0:
             ids.add(v & 0xFFFFFFFF)
-    return sorted(ids)
+    return (sorted(ids), max_block_cycles)
 
 
 def main() -> int:
@@ -55,7 +61,7 @@ def main() -> int:
         "--base-min", type=int, default=0, help="Min base stall length (default: 0)"
     )
     ap.add_argument(
-        "--base-max", type=int, default=32, help="Max base stall length (default: 32)"
+        "--base-max", type=int, default=16, help="Max base stall length (default: 16)"
     )
     ap.add_argument(
         "--threshold-min",
@@ -75,7 +81,7 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     json_path = Path(args.json)
-    ids = read_ids(json_path)
+    ids, max_block_cycles = read_ids_and_cap(json_path)
     if not ids:
         # No JSON or no ids: emit a single non-matching id word so cfg_done can
         # still pulse.
@@ -83,6 +89,17 @@ def main() -> int:
 
     base_min = max(0, int(args.base_min))
     base_max = max(base_min, int(args.base_max))
+
+    # Cap base_max using the design-derived "max_block_cycles" (if present).
+    # If base_min already exceeds the cap, keep the user's base_min/base_max
+    # (i.e., don't force a clamp), since in that configuration the user is
+    # explicitly requesting larger stalls.
+    if max_block_cycles is not None:
+        cap = max(0, int(max_block_cycles))
+        if cap < base_min:
+            base_max = base_min
+        else:
+            base_max = min(base_max, cap)
 
     thr_min = int(args.threshold_min) & 0xFFFFFFFF
     thr_max = int(args.threshold_max) & 0xFFFFFFFF

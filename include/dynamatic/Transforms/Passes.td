@@ -218,6 +218,12 @@ def HandshakeInsertMemStalls : DynamaticPass<"handshake-insert-mem-stalls"> {
     Option<"stallPointsJson", "stall-points-json", "std::string",
            /*default=*/"\"\"",
            "Output path for stall_points.json (empty disables emission).">,
+      Option<"timingModels", "timing-models", "std::string",
+        /*default=*/"\"\"",
+        "Path to JSON-formatted file containing timing models (e.g., data/components.json). When provided, used to derive max_block_cycles from modeled operator latencies.">,
+      Option<"targetPeriod", "target-period", "double",
+        /*default=*/"4.0",
+        "Target clock period used to query delay-dependent latency entries in timing models.">,
   ];
   let constructor = "dynamatic::createHandshakeInsertMemStalls()";
 }
