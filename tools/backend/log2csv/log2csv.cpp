@@ -29,6 +29,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/CommandLine.h"
@@ -122,9 +123,19 @@ struct ChannelState {
     auto dataType = channelType.getDataType();
     if (auto intType = dyn_cast<IntegerType>(dataType)) {
       APInt intVal(data.size(), dataString, 2);
-      if (intType.isSigned())
-        return std::to_string(intVal.getSExtValue());
-      return std::to_string(intVal.getZExtValue());
+      if (intType.isSigned()) {
+        if (intVal.getSignificantBits() <= 64)
+          return std::to_string(intVal.getSExtValue());
+        SmallString<64> s;
+        intVal.toStringSigned(s, /*Radix=*/10);
+        return s.str().str();
+      }
+
+      if (intVal.getActiveBits() <= 64)
+        return std::to_string(intVal.getZExtValue());
+      SmallString<64> s;
+      intVal.toStringUnsigned(s, /*Radix=*/10);
+      return s.str().str();
     }
     if (auto floatType = dyn_cast<FloatType>(dataType)) {
       APFloat floatVal(floatType.getFloatSemantics(), dataString);
