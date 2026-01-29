@@ -32,6 +32,7 @@
 #include "dynamatic/Transforms/HandshakeInferBasicBlocks.h"
 #include "dynamatic/Transforms/HandshakeMarkFPUImpl.h"
 #include "dynamatic/Transforms/HandshakeMaterialize.h"
+#include "dynamatic/Transforms/HandshakeMuxToMerge.h"
 #include "dynamatic/Transforms/HandshakeMinimizeCstWidth.h"
 #include "dynamatic/Transforms/HandshakeOptimizeBitwidths.h"
 #include "dynamatic/Transforms/HandshakeReplaceMemoryInterfaces.h"

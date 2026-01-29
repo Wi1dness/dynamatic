@@ -13,6 +13,7 @@ add_dynamatic_library(DynamaticTransforms
   HandshakeInsertMemStalls.cpp
   HandshakeMaterialize.cpp
   HandshakeMinimizeCstWidth.cpp
+  HandshakeMuxToMerge.cpp
   HandshakeOptimizeBitwidths.cpp
   HandshakeInferBasicBlocks.cpp
   HandshakeReplaceMemoryInterfaces.cpp

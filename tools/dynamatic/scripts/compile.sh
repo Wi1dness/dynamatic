@@ -170,6 +170,7 @@ fi
 
 # handshake transformations
 "$DYNAMATIC_OPT_BIN" "$F_HANDSHAKE" \
+  --handshake-mux-to-merge \
   --handshake-analyze-lsq-usage --handshake-replace-memory-interfaces \
   --handshake-minimize-cst-width --handshake-optimize-bitwidths \
   --handshake-materialize --handshake-infer-basic-blocks \

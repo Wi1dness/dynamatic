@@ -61,7 +61,7 @@ def main() -> int:
         "--base-min", type=int, default=0, help="Min base stall length (default: 0)"
     )
     ap.add_argument(
-        "--base-max", type=int, default=16, help="Max base stall length (default: 16)"
+        "--base-max", type=int, default=0, help="Max base stall length (default: 16)"
     )
     ap.add_argument(
         "--threshold-min",

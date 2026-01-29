@@ -758,6 +758,21 @@
         "name": "DATA_TYPE",
         "type": "dataflow",
         "data-eq": 0,
+        "extra-lb": 1,
+        "generic": false
+      }
+    ],
+    "generator": "python $DYNAMATIC/experimental/tools/unit-generators/vhdl/vhdl-unit-generator.py -n $MODULE_NAME -o $OUTPUT_DIR/$MODULE_NAME.vhd -t merge -p size=$SIZE bitwidth=$BITWIDTH extra_signals=$EXTRA_SIGNALS",
+    "dependencies": ["types"]
+  },
+  {
+    "name": "handshake.merge",
+    "parameters": [
+      { "name": "SIZE", "type": "unsigned", "lb": 1 },
+      {
+        "name": "DATA_TYPE",
+        "type": "dataflow",
+        "data-eq": 0,
         "extra-eq": 0,
         "generic": false
       }
