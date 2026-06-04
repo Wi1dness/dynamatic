@@ -36,6 +36,7 @@ EXCEPTION_DUTS=(
   mul_example
   while_loop_2
   test_bitint
+  loop_store
 )
 
 is_exception_dut() {
@@ -83,8 +84,10 @@ create_dyn_from_template() {
 
   cat <<EOF >"${temp_dyn}"
 set-src ${source_rel_path}
+# set-clock-period 3.33
 ${compile_line}
 write-hdl
+# synthesize
 simulate --transactions ${transactions}
 exit
 EOF

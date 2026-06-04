@@ -13,8 +13,12 @@
 void loop_store(inout_int_t a[N], in_int_t b[N]) {
   for (unsigned i = 0; i < N; ++i) {
     unsigned x = i;
-    if (a[i] == 0)
-      x = b[i] * x;
+    if (a[i] == 0) {
+      unsigned y = b[i];
+      x = x + y;
+    } else {
+      x = x + x;
+    }
     a[i] = x;
   }
 }

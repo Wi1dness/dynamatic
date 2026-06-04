@@ -4,15 +4,15 @@ set-src             integration-test/iseda/loop_store/loop_store.c
 # Compile (from source to Handshake IR/DOT)
 # Provide the --simple-buffers flag to `compile` to use a simple buffering
 # strategy which does not require an MILP solver.
-compile --buffer-algorithm fpga20
-# compile --buffer-algorithm fpga20 --sched-coverage --schedule-randomize
+# compile --buffer-algorithm fpga20
+compile --buffer-algorithm fpga20 --sched-coverage --schedule-randomize
 
 # Generate the VHDL design corresponding to the source code
 write-hdl
 
 # Simulate and verify using Modelsim
-simulate
-# simulate --transactions 2
+# simulate
+simulate --transactions 100
 
 # Prepare data for the dataflow visualizer
 # visualize

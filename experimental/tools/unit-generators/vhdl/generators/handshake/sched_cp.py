@@ -7,7 +7,7 @@ def generate_sched_cp(name, params):
     bitwidth = int(params.get("bitwidth", 0))
     extra_signals = params.get("extra_signals", {}) or {}
     schedcp_id = int(params.get("schedcp_id", 0))
-    bitmap_lg2 = int(params.get("bitmap_lg2", 16))
+    bitmap_lg2 = int(params.get("bitmap_lg2", 12))
 
     if bitmap_lg2 < 1:
         raise ValueError("bitmap_lg2 must be >= 1")

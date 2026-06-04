@@ -75,20 +75,21 @@ if {[regexp -nocase {2015\.1.*} $vivado_ver match]} {
 # Generate synthesis script
 echo -e \
 "set_param general.maxThreads 8
+create_project $KERNEL_NAME ./$KERNEL_NAME -part xczu19eg-ffvc1760-1-i -force
 $VIVADO_CMDS
 $READ_VHDL
 $READ_VERILOG
 $READ_TCL
 read_xdc "$F_PERIOD"
-synth_design -top $KERNEL_NAME -part xc7k160tfbg484-2 -no_iobuf -mode out_of_context
-report_utilization > $F_UTILIZATION_SYN
+synth_design -top $KERNEL_NAME -part xczu19eg-ffvc1760-1-i -no_iobuf -mode out_of_context
+report_utilization -hierarchical -hierarchical_depth 2 > $F_UTILIZATION_SYN
 report_timing > $F_TIMING_SYN
 opt_design
 place_design
 phys_opt_design
 route_design
 phys_opt_design
-report_utilization > $F_UTILIZATION_PR
+report_utilization -hierarchical -hierarchical_depth 2 > $F_UTILIZATION_PR
 report_timing > $F_TIMING_PR
 exit" > "$F_SCRIPT"
 

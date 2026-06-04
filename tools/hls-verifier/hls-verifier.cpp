@@ -69,9 +69,8 @@ void generateModelsimScripts(const VerificationContext &ctx) {
   if (ctx.useVivadoFPU()) {
     os << "eval vsim -voptargs=+acc tb work.glbl\n";
   } else {
-    os << "eval vsim -voptargs=+acc tb\n";
+    os << "eval vsim tb\n";
   }
-  os << "log -r *\n";
   os << "run -all\n";
   os << "exit\n";
 }

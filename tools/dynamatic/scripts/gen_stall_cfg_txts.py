@@ -58,22 +58,22 @@ def main() -> int:
     )
     ap.add_argument("--transactions", type=int, default=1)
     ap.add_argument(
-        "--base-min", type=int, default=0, help="Min base stall length (default: 0)"
+        "--base-min", type=int, default=1, help="Min base stall length (default: 1)"
     )
     ap.add_argument(
-        "--base-max", type=int, default=0, help="Max base stall length (default: 16)"
+        "--base-max", type=int, default=1, help="Max base stall length (default: 1)"
     )
     ap.add_argument(
         "--threshold-min",
         type=lambda s: int(s, 0),
-        default=0,
-        help="Min threshold (uint32, default: 0)",
+        default=0x00000000,
+        help="Min threshold (uint32, default: 0x00000000)",
     )
     ap.add_argument(
         "--threshold-max",
         type=lambda s: int(s, 0),
-        default=0xFFFFFFFF,
-        help="Max threshold (uint32, default: 0xFFFFFFFF)",
+        default=0xC0000000,
+        help="Max threshold (uint32, default: 0xC0000000)",
     )
     args = ap.parse_args()
 
@@ -95,7 +95,7 @@ def main() -> int:
     # (i.e., don't force a clamp), since in that configuration the user is
     # explicitly requesting larger stalls.
     if max_block_cycles is not None:
-        cap = max(0, int(max_block_cycles))
+        cap = max(1, int(max_block_cycles))
         if cap < base_min:
             base_max = base_min
         else:

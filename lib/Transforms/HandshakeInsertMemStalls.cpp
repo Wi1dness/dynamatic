@@ -118,7 +118,7 @@ static int64_t estimateMaxBlockCycles(handshake::FuncOp func,
   (void)func;
   (void)timingDB;
   (void)targetPeriod;
-  return 0;
+  return 1;
 
   // NOTE: Estimation currently disabled.
   // The original implementation is kept below for future iteration.
@@ -237,7 +237,7 @@ public:
     // IR remains deterministic for a given kernel+pipeline.
     uint32_t nextId = 0;
     SmallVector<StallPointInfo> allPoints;
-    int64_t maxBlockCycles = 0;
+    int64_t maxBlockCycles = 1;
 
     auto ensureCfgArg = [&](handshake::FuncOp func) -> BlockArgument {
       Block &entry = func.getBody().front();

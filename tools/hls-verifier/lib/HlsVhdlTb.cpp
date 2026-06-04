@@ -680,10 +680,24 @@ void getOutputTagGeneration(mlir::raw_indented_ostream &os,
 
 static void emitCovsumReporter(mlir::raw_indented_ostream &os,
                                VerificationContext &ctx) {
-  if (!hasSchedCovsum(ctx.funcOp))
-    return;
 
   bool hasCfg = hasCfgChannel(ctx.funcOp);
+
+  if (!hasSchedCovsum(ctx.funcOp)) {
+    os << "\n";
+    os << "reset_end : process(tb_clk, tb_rst)\n";
+    os << "begin\n";
+    os << "  if rising_edge(tb_clk) then\n";
+    if (!hasCfg)
+      os << "    rst_reg <= tb_stop;\n";
+    os << "    if (tb_rst = '1') then\n";
+    if (!hasCfg)
+      os << "      rst_reg <= '0';\n";
+    os << "    end if;\n";
+    os << "  end if;\n";
+    os << "end process;";
+    return;
+  }
 
   os << "\n";
   os << "-- Capture end covsum and report it once per completed transaction.\n";
